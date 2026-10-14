@@ -480,3 +480,14 @@ test('rank: Solo/Duo och Flex sparas, bara när något ändrats; utan åtkomst h
   const r = await syncAccount({ riot: riotWith(fakeRiot({ history: { [P1]: 3 }, leagueStatus: 403 })), db, account: acc(db) });
   assert.equal(r.done, true, 'utan åtkomst till league-v4 fortsätter synken');
 });
+
+test('rank: utan tabellen (007 inte körd) fortsätter synken', async () => {
+  const db = memoryDb();
+  db.lastRanks = async () => { throw new Error('Databasfel 404: {"code":"PGRST205","message":"Could not find the table nunu.rank_snapshot"}'); };
+  await linkAccount({ riot: riotWith(fakeRiot()), db, userId: 'user-1', riotId: 'Rymm3n#EUW' });
+  const r = await syncAccount({ riot: riotWith(fakeRiot({ history: { [P1]: 2 } })), db, account: acc(db) });
+  assert.equal(r.done, true);
+  assert.equal(db.t.account_match.size, 2);
+  db.lastRanks = async () => { throw new Error('nätverksfel'); };
+  await assert.rejects(syncAccount({ riot: riotWith(fakeRiot({ history: { [P1]: 2 } })), db, account: acc(db) }), /nätverksfel/, 'andra fel syns fortfarande');
+});

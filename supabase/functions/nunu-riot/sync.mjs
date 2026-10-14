@@ -106,8 +106,14 @@ async function syncRanks({ riot, db, account }) {
     throw err;
   }
   const rows = deriveRanks(entries, account.puuid);
-  const last = await db.lastRanks(account.puuid);
-  await db.insertRankSnapshots(rows.filter((r) => rankChanged(last[r.queue], r)));
+  try {
+    const last = await db.lastRanks(account.puuid);
+    await db.insertRankSnapshots(rows.filter((r) => rankChanged(last[r.queue], r)));
+  } catch (err) {
+    // Tabellen saknas tills 007_rank.sql är körd – då hoppas rank över, resten av synken fortsätter
+    if (/rank_snapshot|PGRST205|42P01/.test(String(err.message))) return;
+    throw err;
+  }
 }
 
 export async function syncAccount({ riot, db, account: given, batchSize = BATCH_SIZE, now = () => new Date() }) {
