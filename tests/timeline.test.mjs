@@ -116,3 +116,62 @@ test('run: sparar Riots svar oförändrade och hämtar inte samma match två gå
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test('summary: samlad rapport över flera matcher', async () => {
+  const { findPuuid, relevant, summarize, storage, formatSummary } = await import('../tools/timeline/summary.mjs');
+  const named = structuredClone(match);
+  named.info.participants[0].riotIdGameName = 'Rymm3n';
+  named.info.participants[0].riotIdTagline = 'EUW';
+  const lost = structuredClone(named);
+  lost.metadata.matchId = 'EUW1_2';
+  lost.info.participants.forEach((x) => { x.win = !x.win; });
+  const aram = structuredClone(named);
+  aram.info.queueId = 450;
+  const games = [{ match: named, timeline }, { match: lost, timeline }, { match: aram, timeline }];
+
+  assert.equal(findPuuid(games, 'rymm3n#euw'), ME);
+  assert.equal(relevant(games, ME).length, 2, 'ARAM räknas inte');
+  assert.equal(relevant(games, ME, 'Ahri').length, 0);
+
+  const r = summarize(relevant(games, ME), ME);
+  assert.deepEqual([r.games, r.wins, r.losses], [2, 1, 1]);
+  assert.equal(r.damage.win.perMin, 500);
+  assert.equal(r.damage.win.at10, 4000);
+  assert.equal(r.deaths.total, 2);
+  assert.equal(r.deaths.before15, 1);
+  assert.equal(r.deaths.places.camp, 2, 'blue buff gjorde skada = dödsfall vid camp');
+  assert.equal(r.deaths.solo, 0);
+  assert.deepEqual(r.deaths.killers.map((k) => [k.name, k.involved, k.killed]), [['LeeSin', 2, 2], ['Zed', 2, 0]]);
+  assert.deepEqual(r.opponents, [{ name: 'LeeSin', games: 2, wins: 1 }]);
+  assert.equal(r.deaths.byWindow[0].count, 2);
+
+  const st = storage([{ match: 80 * 1024, timeline: 900 * 1024 }, { match: 90 * 1024, timeline: 1000 * 1024 }]);
+  assert.deepEqual(st, { matches: 2, totalMb: 2, matchKb: 85, timelineKb: 950 });
+  assert.match(formatSummary(r, st, 'Rymm3n#EUW · Nunu'), /1V 1F \(50 %\)/);
+});
+
+test('report: läser sparade filer utan Riot-nyckel', async () => {
+  const { writeFile, mkdir } = await import('node:fs/promises');
+  const { run: report } = await import('../tools/timeline/report.mjs');
+  const dir = await mkdtemp(join(tmpdir(), 'nunu-rep-'));
+  try {
+    const m = join(dir, 'matches');
+    await mkdir(m);
+    await writeFile(join(m, 'EUW1_1.match.json'), JSON.stringify(match));
+    await writeFile(join(m, 'EUW1_1.timeline.json'), JSON.stringify(timeline));
+    await writeFile(join(m, 'EUW1_9.match.json'), JSON.stringify(match)); // tidslinje saknas – hoppas över
+    const text = await report({ argv: ['--dir', m, '--id', 'Finns#Inte'], log: () => {} });
+    assert.match(text, /Lagring: 1 matcher/);
+    assert.match(await readFile(join(dir, 'sammanfattning.txt'), 'utf8'), /DÖDSFALL/);
+    await assert.rejects(report({ argv: ['--dir', join(dir, 'tom')], log: () => {} }), /Inga sparade matcher/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('dayRange: flera dagar bakåt', () => {
+  const r = dayRange('2026-10-14', new Date(), 7);
+  assert.equal(r.endTime - r.startTime, 7 * 86400);
+  assert.equal(r.label, '2026-10-08_2026-10-14');
+  assert.throws(() => parseArgs(['--days', '0']), /1–400/);
+});

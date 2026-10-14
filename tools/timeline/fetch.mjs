@@ -9,6 +9,7 @@
  *
  * Val:
  *   --date 2026-10-14     vilken dag (standard: i dag)
+ *   --days 7              antal dagar bakåt, räknat från och med --date (standard: 1)
  *   --id Namn#Tagg        Riot ID (standard: RIOT_ID eller Rymm3n#EUW)
  *   --platform euw1       server (standard: euw1)
  *   --out data/matches    var filerna sparas (mappen data/ finns inte i git)
@@ -23,23 +24,27 @@ import { createRiot, parseRiotId, regionFor } from '../../supabase/functions/nun
 import { damageSummary, damageCurve, deaths, formatReport } from './damage.mjs';
 
 export function parseArgs(argv, env = {}) {
-  const opt = { date: null, id: env.RIOT_ID || 'Rymm3n#EUW', platform: 'euw1', out: join('data', 'matches') };
+  const opt = { date: null, days: '1', id: env.RIOT_ID || 'Rymm3n#EUW', platform: 'euw1', out: join('data', 'matches') };
   for (let i = 0; i < argv.length; i += 2) {
     const key = argv[i].replace(/^--/, '');
     if (!(key in opt)) throw new Error(`Okänt val ${argv[i]}`);
     opt[key] = argv[i + 1];
   }
   if (opt.date && !/^\d{4}-\d{2}-\d{2}$/.test(opt.date)) throw new Error('--date ska skrivas ÅÅÅÅ-MM-DD');
+  if (!/^\d+$/.test(opt.days) || Number(opt.days) < 1 || Number(opt.days) > 400) throw new Error('--days ska vara 1–400');
+  opt.days = Number(opt.days);
   return opt;
 }
 
-/** Dygnets start och slut i lokal tid, i sekunder (som Riot vill ha dem). */
-export function dayRange(date, now = new Date()) {
+/** Perioden i lokal tid, i sekunder (som Riot vill ha dem): `days` dygn som slutar med `date`. */
+export function dayRange(date, now = new Date(), days = 1) {
   const [y, m, d] = date ? date.split('-').map(Number) : [now.getFullYear(), now.getMonth() + 1, now.getDate()];
-  const start = new Date(y, m - 1, d);
+  const start = new Date(y, m - 1, d - days + 1);
   const end = new Date(y, m - 1, d + 1);
   const pad = (x) => String(x).padStart(2, '0');
-  return { label: `${y}-${pad(m)}-${pad(d)}`, startTime: start.getTime() / 1000, endTime: end.getTime() / 1000 };
+  const fmt = (t) => `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`;
+  const label = days > 1 ? `${fmt(start)}_${fmt(new Date(y, m - 1, d))}` : fmt(start);
+  return { label, startTime: start.getTime() / 1000, endTime: end.getTime() / 1000 };
 }
 
 const exists = (f) => access(f).then(() => true, () => false);
@@ -53,13 +58,18 @@ async function cached(file, fetchFn) {
 
 export async function run({ argv, env, riot, log = console.log }) {
   const opt = parseArgs(argv, env);
-  const range = dayRange(opt.date);
+  const range = dayRange(opt.date, new Date(), opt.days);
   const region = regionFor(opt.platform);
   const { gameName, tagLine } = parseRiotId(opt.id);
 
   const account = await riot.accountByRiotId(region, gameName, tagLine);
   if (!account) throw new Error(`Hittade inget konto ${opt.id}`);
-  const ids = await riot.matchIds(region, account.puuid, 0, 100, range);
+  const ids = [];
+  for (let start = 0; ; start += 100) {
+    const page = await riot.matchIds(region, account.puuid, start, 100, range);
+    ids.push(...page);
+    if (page.length < 100) break;
+  }
   log(`${opt.id} · ${range.label} · ${ids.length} matcher`);
   if (!ids.length) return [];
 
@@ -75,7 +85,8 @@ export async function run({ argv, env, riot, log = console.log }) {
   }
   const file = join(opt.out, '..', `skada-${range.label}.txt`);
   await writeFile(file, `${opt.id} · ${range.label}\n\n${reports.join('\n\n')}\n`);
-  log(`\nSparat: ${opt.out}/ (rådata) och ${file} (rapporten)`);
+  log(`\nSparat: ${join(opt.out)} (rådata) och ${file} (rapporten)`);
+  log('Samlad rapport över alla sparade matcher: node tools/timeline/report.mjs');
   return reports;
 }
 

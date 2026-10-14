@@ -75,7 +75,16 @@ export const damageAt = (curve, minute) => {
   return hit ? hit.total : 0;
 };
 
-/** Dina dödsfall: vem som dödade dig och varifrån skadan kom. */
+/** Var ett dödsfall skedde, utifrån skadan som inte kom från champions. */
+export function placeOf(name = '', type = '') {
+  if (type === 'TOWER' || /turret/i.test(name)) return 'torn';
+  if (/dragon|baron|horde|riftherald|atakhan/i.test(name)) return 'objective';
+  if (/blue|red|gromp|krug|murkwolf|razorbeak|crab/i.test(name)) return 'camp';
+  if (/minion/i.test(name)) return 'våg';
+  return null;
+}
+
+/** Dina dödsfall: vem som dödade dig, varifrån skadan kom och var det hände (places). */
 export function deaths(timeline, match, puuid) {
   const id = participantId(timeline, puuid);
   const names = Object.fromEntries(match.info.participants.map((p) => [p.participantId, p.championName]));
@@ -84,7 +93,9 @@ export function deaths(timeline, match, puuid) {
     for (const e of f.events || []) {
       if (e.type !== 'CHAMPION_KILL' || e.victimId !== id) continue;
       const bySource = new Map();
+      const places = new Set();
       for (const d of e.victimDamageReceived || []) {
+        if (!d.participantId) { const pl = placeOf(d.name, d.type); if (pl) places.add(pl); }
         const name = d.participantId ? names[d.participantId] || d.name : d.name || 'Övrigt'; // 0 = torn/minion/monster
         const dmg = (d.physicalDamage || 0) + (d.magicDamage || 0) + (d.trueDamage || 0);
         bySource.set(name, (bySource.get(name) || 0) + dmg);
@@ -92,6 +103,8 @@ export function deaths(timeline, match, puuid) {
       const sources = [...bySource.entries()].map(([name, damage]) => ({ name, damage })).sort((a, b) => b.damage - a.damage);
       out.push({
         time: mmss(e.timestamp),
+        ms: e.timestamp,
+        places: [...places],
         killer: e.killerId ? names[e.killerId] || 'Torn/minion' : 'Torn/minion',
         helpers: (e.assistingParticipantIds || []).map((x) => names[x]),
         total: sources.reduce((s, x) => s + x.damage, 0),

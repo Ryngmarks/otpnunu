@@ -45,6 +45,18 @@ PowerShell: `$env:RIOT_API_KEY="RGAPI-…"; node tools/timeline/fetch.mjs`
 Sparar Riots svar oförändrade i `data/matches/` (finns inte i git) och en skaderapport i
 `data/skada-<datum>.txt`: skada mot champions (totalt, per minut, andel av laget, mot motståndaren),
 skada vid 10/14/20 min och vem som gjorde skadan när du dog. Redan sparade matcher hämtas inte igen.
+Flera dagar på en gång: `--days 30` (räknat bakåt från och med `--date`, standard i dag).
+
+Samlad rapport över alla sparade matcher (ingen Riot-nyckel behövs):
+
+```bash
+node tools/timeline/report.mjs                  # Nunu på Summoner's Rift
+node tools/timeline/report.mjs --champion alla
+```
+
+Visar lagringen på disk, skada i vinster mot förluster (per minut, vid 10 och 14 min, andel av laget),
+dödsfall per tidsintervall och plats (camp, objective, torn, våg, 1v1), vilka champions som oftast
+dödar dig och resultat mot olika motståndare. Sparas i `data/sammanfattning.txt`.
 
 ## Tester
 
