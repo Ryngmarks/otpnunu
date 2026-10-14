@@ -86,11 +86,16 @@ export function createRiot({
     accountByPuuid: (region, puuid) =>
       get(`${regional(region)}/riot/account/v1/accounts/by-puuid/${enc(puuid)}`, { allow404: true }),
 
-    matchIds: (region, puuid, start, count = 100) =>
-      get(`${regional(region)}/lol/match/v5/matches/by-puuid/${enc(puuid)}/ids?start=${start}&count=${count}`),
+    /** startTime/endTime (valfria) i sekunder sedan 1970. */
+    matchIds: (region, puuid, start, count = 100, { startTime, endTime } = {}) =>
+      get(`${regional(region)}/lol/match/v5/matches/by-puuid/${enc(puuid)}/ids?start=${start}&count=${count}`
+        + `${startTime ? `&startTime=${startTime}` : ''}${endTime ? `&endTime=${endTime}` : ''}`),
 
     match: (region, matchId) =>
       get(`${regional(region)}/lol/match/v5/matches/${enc(matchId)}`, { allow404: true }),
+
+    timeline: (region, matchId) =>
+      get(`${regional(region)}/lol/match/v5/matches/${enc(matchId)}/timeline`, { allow404: true }),
 
     masteries: (platform, puuid) =>
       get(`${platformUrl(platform)}/lol/champion-mastery/v4/champion-masteries/by-puuid/${enc(puuid)}`),

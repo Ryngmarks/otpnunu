@@ -18,6 +18,7 @@ supabase/functions/nunu-riot/    Edge Function: kopplar Riot-konton och synkar m
 supabase/cleanup/                engångsskript (borttagning av gamla fotbollsappen)
 tests/                           tester + dev-server.mjs
 tools/riot-api-test.mjs          API-test mot Riot
+tools/timeline/                  hämtar dagens matcher med tidslinje till den egna datorn + skadeanalys
 ```
 
 Inga ramverk, ingen byggprocess, inga beroenden.
@@ -31,6 +32,19 @@ node tests/dev-server.mjs          # → http://localhost:8787/
 Dev-servern kör den riktiga webbsidan och den riktiga Edge Function-koden mot en låtsasdatabas
 (med samma radskydd som i Supabase) och en låtsas-Riot. Logga in med `johan@nik.se` / `nunu123`
 och koppla `Rymm3n#EUW` och `Smurf#EUW`.
+
+## Dagens matcher med tidslinje (på den egna datorn)
+
+```bash
+RIOT_API_KEY=RGAPI-… node tools/timeline/fetch.mjs                 # i dag, Rymm3n#EUW
+RIOT_API_KEY=RGAPI-… node tools/timeline/fetch.mjs --date 2026-10-14
+```
+
+PowerShell: `$env:RIOT_API_KEY="RGAPI-…"; node tools/timeline/fetch.mjs`
+
+Sparar Riots svar oförändrade i `data/matches/` (finns inte i git) och en skaderapport i
+`data/skada-<datum>.txt`: skada mot champions (totalt, per minut, andel av laget, mot motståndaren),
+skada vid 10/14/20 min och vem som gjorde skadan när du dog. Redan sparade matcher hämtas inte igen.
 
 ## Tester
 

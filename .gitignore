@@ -1,0 +1,3 @@
+node_modules/
+# Lokalt sparade matcher och tidslinjer (tools/timeline/fetch.mjs)
+data/
