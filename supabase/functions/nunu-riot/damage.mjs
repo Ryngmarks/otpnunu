@@ -9,8 +9,14 @@ const mmss = (ms) => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 };
 
+/**
+ * puuid kan vara en lista: kontots nuvarande PUUID och tidigare (PUUID krypteras olika
+ * per Riot-nyckel, så äldre rådata kan innehålla ett annat PUUID för samma spelare).
+ */
+const ids = (puuid) => [].concat(puuid);
+
 const participantId = (timeline, puuid) => {
-  const p = timeline.info.participants.find((x) => x.puuid === puuid);
+  const p = timeline.info.participants.find((x) => ids(puuid).includes(x.puuid));
   if (!p) throw new Error('Spelaren finns inte i tidslinjen');
   return p.participantId;
 };
@@ -81,7 +87,7 @@ export function deaths(timeline, match, puuid) {
 
 /** Allt synken sparar från en tidslinje: skada vid 10/14/20 min och dödsfallen. null om spelaren saknas. */
 export function deriveTimeline(timeline, match, puuid) {
-  if (!timeline?.info?.participants?.some((p) => p.puuid === puuid)) return null;
+  if (!timeline?.info?.participants?.some((p) => ids(puuid).includes(p.puuid))) return null;
   const curve = damageCurve(timeline, puuid);
   return {
     at10: damageAt(curve, 10),

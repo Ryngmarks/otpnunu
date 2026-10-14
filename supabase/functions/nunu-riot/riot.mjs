@@ -67,7 +67,11 @@ export function createRiot({
       if (res.status === 401 || res.status === 403) {
         throw new HttpError(502, 'Riot-nyckeln är ogiltig eller har gått ut');
       }
-      if (!res.ok) throw new HttpError(502, `Riot svarade ${res.status}`);
+      if (!res.ok) {
+        const err = new HttpError(502, `Riot svarade ${res.status}`);
+        err.riotStatus = res.status;  // 400 för ett PUUID kan betyda att det hör till en annan Riot-nyckel
+        throw err;
+      }
       return res.json();
     }
     throw new RateLimitError(maxWaitS);

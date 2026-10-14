@@ -80,6 +80,10 @@ export function createDb({ url, serviceKey, fetchImpl = fetch }) {
 
     upsertAccount: (row) => upsert('riot_account', [row], 'puuid'),
 
+    /** Nytt PUUID för kontot (ny Riot-nyckel). Matcher, mastery och dödsfall följer med (004_rekey.sql). */
+    rekeyAccount: (oldPuuid, newPuuid, previous) =>
+      call(`riot_account?puuid=eq.${enc(oldPuuid)}`, { method: 'PATCH', body: { puuid: newPuuid, previous_puuids: previous }, prefer: 'return=minimal' }),
+
     updateAccount: (puuid, fields) =>
       call(`riot_account?puuid=eq.${enc(puuid)}`, { method: 'PATCH', body: fields, prefer: 'return=minimal' }),
 

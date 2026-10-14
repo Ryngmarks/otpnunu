@@ -80,6 +80,7 @@ export function fakeRiot({ history = { [P1]: 250, [P2]: 0, [PX]: 250 }, rateLimi
     }
     if ((m = p.match(/accounts\/by-puuid\/(.+)$/))) {
       const name = Object.keys(accounts).find((k) => accounts[k] === m[1]);
+      if (!name) return res(400, { status: { message: 'Bad Request - Exception decrypting', status_code: 400 } }); // PUUID från en annan nyckel
       return res(200, { puuid: m[1], gameName: name.split('#')[0], tagLine: 'EUW' });
     }
     if ((m = p.match(/matches\/by-puuid\/(.+)\/ids$/))) {

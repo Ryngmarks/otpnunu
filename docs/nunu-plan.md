@@ -226,6 +226,7 @@ Dev-servern kör den riktiga webbsidan och den riktiga Edge Function-koden mot e
 - [ ] Lägg till `nunu` under Supabase → *Settings → Data API → Exposed schemas*.
 - [ ] Kör `supabase/nunu/002_season_history.sql` (äldre säsonger, se nedan).
 - [ ] Kör `supabase/nunu/003_timelines.sql` (skada, dödsfall och bucketen `timelines`).
+- [ ] Kör `supabase/nunu/004_rekey.sql` (krävs för byte av Riot-nyckel, se nedan).
 - [ ] Skapa en Supabase access token (*Account → Access Tokens*) och lägg in den som GitHub-secret
       `SUPABASE_ACCESS_TOKEN` – eller välj manuell driftsättning.
 - [ ] Ansök om en **Personal API Key** hos Riot (*Register Product*). Utvecklingsnyckeln gäller bara
@@ -255,3 +256,10 @@ snitt-K/D/A (avskrivet från OP.GG, fliken "All"). Siffrorna ligger i
 - Överlapp: en säsong som pågick när synken börjar får ett slutdatum (`ended`). Synkade matcher
   före det senaste slutdatumet räknas inte i totalen – de finns redan i säsongen.
   S2025 har `ended = 2026-01-08` (ungefärligt säsongsslut; justera vid behov).
+
+## Byte av Riot-nyckel
+
+Riot krypterar PUUID olika för varje nyckel (projekt). Med en ny nyckel svarar Riot 400 på de
+sparade PUUID. Synken löser det själv: kontot slås upp på nytt via Riot ID och får sitt nya PUUID;
+matcher, mastery och dödsfall följer med (`004_rekey.sql`, *on update cascade*). Det gamla PUUID sparas i
+`riot_account.previous_puuids`, eftersom äldre rådata och tidslinjer innehåller det.

@@ -26,3 +26,7 @@ $PSQL -d "$DB" -f 002_season_history_test.sql 2>&1 | sed -n 's/^psql:[^ ]* \(NOT
 PGOPTIONS='-c client_min_messages=warning' $PSQL -d "$DB" -f ../003_timelines.sql
 PGOPTIONS='-c client_min_messages=warning' $PSQL -d "$DB" -f ../003_timelines.sql
 $PSQL -d "$DB" -f 003_timelines_test.sql 2>&1 | sed -n 's/^psql:[^ ]* \(NOTICE\|ERROR\):  //p; /GODKÄNDA/p'
+# Byte av Riot-nyckel: två gånger (ska gå att köra om)
+PGOPTIONS='-c client_min_messages=warning' $PSQL -d "$DB" -f ../004_rekey.sql
+PGOPTIONS='-c client_min_messages=warning' $PSQL -d "$DB" -f ../004_rekey.sql
+$PSQL -d "$DB" -f 004_rekey_test.sql 2>&1 | sed -n 's/^psql:[^ ]* \(NOTICE\|ERROR\):  //p; /GODKÄNDA/p'

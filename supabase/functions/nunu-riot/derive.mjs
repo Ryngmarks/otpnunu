@@ -26,12 +26,14 @@ export function durationSeconds(info) {
 /**
  * En rad för nunu.account_match: matchen ur ett kontos perspektiv.
  * Med tidslinje kommer även skada vid 10/14/20 min med.
+ * aliases: kontots tidigare PUUID (från en annan Riot-nyckel) – äldre rådata kan innehålla dem.
  * Returnerar null om kontot inte var med i matchen.
  */
-export function deriveAccountMatch(match, puuid, timeline = null) {
+export function deriveAccountMatch(match, puuid, timeline = null, aliases = []) {
   const info = (match && match.info) || {};
   const participants = info.participants || [];
-  const p = participants.find((x) => x.puuid === puuid);
+  const ids = [puuid, ...aliases];
+  const p = participants.find((x) => ids.includes(x.puuid));
   if (!p) return null;
 
   const position = p.teamPosition || null; // tomt i lägen utan roller (t.ex. Arena)
@@ -40,7 +42,7 @@ export function deriveAccountMatch(match, puuid, timeline = null) {
     : null;
   // Riot utelämnar fält som är 0
   const teamDamage = participants.filter((x) => x.teamId === p.teamId).reduce((s, x) => s + (x.totalDamageDealtToChampions || 0), 0);
-  const tl = timeline ? deriveTimeline(timeline, match, puuid) : null;
+  const tl = timeline ? deriveTimeline(timeline, match, ids) : null;
 
   return {
     puuid,
@@ -77,8 +79,8 @@ export function deriveAccountMatch(match, puuid, timeline = null) {
 }
 
 /** Rader för nunu.death ur tidslinjen. Tom lista utan tidslinje. */
-export function deriveDeaths(match, puuid, timeline) {
-  const tl = timeline ? deriveTimeline(timeline, match, puuid) : null;
+export function deriveDeaths(match, puuid, timeline, aliases = []) {
+  const tl = timeline ? deriveTimeline(timeline, match, [puuid, ...aliases]) : null;
   if (!tl) return [];
   const seen = new Set();
   return tl.deaths

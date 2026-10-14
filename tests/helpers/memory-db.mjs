@@ -25,6 +25,20 @@ export function memoryDb({ members = ['user-1', 'user-2'] } = {}) {
       if (a) Object.assign(a, row);
       else t.riot_account.push({ linked_at: new Date().toISOString(), last_synced_at: null, backfill_done: false, ...row });
     },
+    rekeyAccount: async (oldPuuid, newPuuid, previous) => {
+      Object.assign(t.riot_account.find((a) => a.puuid === oldPuuid), { puuid: newPuuid, previous_puuids: previous });
+      for (const [k, r] of [...t.account_match]) {
+        if (r.puuid !== oldPuuid) continue;
+        t.account_match.delete(k);
+        t.account_match.set(`${newPuuid}|${r.match_id}`, { ...r, puuid: newPuuid });
+      }
+      for (const [k, r] of [...t.mastery]) {
+        if (r.puuid !== oldPuuid) continue;
+        t.mastery.delete(k);
+        t.mastery.set(`${newPuuid}|${r.champion_id}`, { ...r, puuid: newPuuid });
+      }
+      t.death.forEach((d) => { if (d.puuid === oldPuuid) d.puuid = newPuuid; });
+    },
     updateAccount: async (puuid, fields) => { Object.assign(t.riot_account.find((a) => a.puuid === puuid) || {}, fields); },
     knownMatchIds: async (puuid) => new Set([...t.account_match.values()].filter((r) => r.puuid === puuid).map((r) => r.match_id)),
     staleMatchIds: async (puuid, version) => [...t.account_match.values()]

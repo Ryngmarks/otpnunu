@@ -16,7 +16,16 @@ export async function linkAccount({ riot, db, userId, riotId, platform = 'euw1' 
   if (!acc) throw new HttpError(404, `Hittade inget konto ${gameName}#${tagLine}`);
 
   const profile = await db.ensureProfile(userId);
-  const existing = await db.getAccount(acc.puuid);
+  let existing = await db.getAccount(acc.puuid);
+  if (!existing) {
+    // Samma konto kopplat med en annan Riot-nyckel (annat PUUID)? Byt PUUID i stället för att koppla en kopia.
+    const same = (await db.listAccounts(profile.id)).find((a) =>
+      a.game_name.toLowerCase() === acc.gameName.toLowerCase() && a.tag_line.toLowerCase() === acc.tagLine.toLowerCase());
+    if (same) {
+      await db.rekeyAccount(same.puuid, acc.puuid, [...(same.previous_puuids || []), same.puuid]);
+      existing = { ...same, puuid: acc.puuid };
+    }
+  }
   if (existing && existing.profile_id !== profile.id) {
     throw new HttpError(409, 'Kontot är redan kopplat till en annan profil');
   }
@@ -57,15 +66,40 @@ async function findMissingIds({ riot, account, known }) {
  * Returnerar { puuid, imported, remaining, retryAfter, done }.
  * done = false betyder att webbsidan ska anropa igen (efter retryAfter sekunder om den är satt).
  */
-export async function syncAccount({ riot, db, account, batchSize = BATCH_SIZE, now = () => new Date() }) {
-  const result = { puuid: account.puuid, imported: 0, remaining: 0, retryAfter: null, done: false };
+/**
+ * Riot krypterar PUUID olika för varje nyckel. Efter byte av nyckel svarar Riot 400 på det
+ * sparade PUUID – då slås kontot upp på nytt via Riot ID och får det nya PUUID.
+ * Det gamla sparas i previous_puuids, eftersom äldre rådata innehåller det.
+ */
+async function currentAccount({ riot, db, account }) {
+  let acc;
+  try {
+    acc = await riot.accountByPuuid(account.region, account.puuid);
+  } catch (err) {
+    if (err.riotStatus !== 400) throw err;
+    const fresh = await riot.accountByRiotId(account.region, account.game_name, account.tag_line);
+    if (!fresh) {
+      throw new HttpError(409, `${account.game_name}#${account.tag_line} hittas inte med den nya Riot-nyckeln – koppla bort kontot och koppla det igen`);
+    }
+    const previous = [...(account.previous_puuids || []), account.puuid];
+    await db.rekeyAccount(account.puuid, fresh.puuid, previous);
+    return { ...account, puuid: fresh.puuid, previous_puuids: previous };
+  }
+  // Namnet kan ha bytts sedan kontot kopplades
+  if (acc && (acc.gameName !== account.game_name || acc.tagLine !== account.tag_line)) {
+    await db.updateAccount(account.puuid, { game_name: acc.gameName, tag_line: acc.tagLine });
+  }
+  return account;
+}
+
+export async function syncAccount({ riot, db, account: given, batchSize = BATCH_SIZE, now = () => new Date() }) {
+  const result = { puuid: given.puuid, imported: 0, remaining: 0, retryAfter: null, done: false };
+  let account = given;
   let todo = [];
   try {
-    // Namnet kan ha bytts sedan kontot kopplades
-    const acc = await riot.accountByPuuid(account.region, account.puuid);
-    if (acc && (acc.gameName !== account.game_name || acc.tagLine !== account.tag_line)) {
-      await db.updateAccount(account.puuid, { game_name: acc.gameName, tag_line: acc.tagLine });
-    }
+    account = await currentAccount({ riot, db, account });
+    result.puuid = account.puuid;
+    const aliases = account.previous_puuids || [];
 
     const masteries = await riot.masteries(account.platform, account.puuid);
     await db.upsertMastery(masteries.map((m) => deriveMastery(m, account.puuid)));
@@ -98,10 +132,10 @@ export async function syncAccount({ riot, db, account, batchSize = BATCH_SIZE, n
             if (timeline) await db.storeTimeline(id, timeline);
           }
         }
-        const row = deriveAccountMatch(match, account.puuid, timeline);
+        const row = deriveAccountMatch(match, account.puuid, timeline, aliases);
         if (row) {
           derived.push(row);
-          deaths.push(...deriveDeaths(match, account.puuid, timeline));
+          deaths.push(...deriveDeaths(match, account.puuid, timeline, aliases));
         }
         result.imported++;
       }

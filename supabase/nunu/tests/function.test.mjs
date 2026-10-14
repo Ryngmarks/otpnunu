@@ -376,3 +376,47 @@ test('db: tidslinjer gzippas till Storage, dödsfall ersätts, gamla matcher hit
   assert.deepEqual(await db.staleMatchIds(P1, 2), ['EUW1_3']);
   assert.match(seen.at(-1).url, /derived_version=lt\.2/);
 });
+
+test('ny Riot-nyckel: kontot får nytt PUUID, äldre matcher räknas om med det gamla', async () => {
+  const OLD = 'o'.repeat(78);
+  const old = (n, fn) => JSON.parse(JSON.stringify(fn(n)).replaceAll(P1, OLD)); // som hämtat med gamla nyckeln
+  const db = memoryDb();
+  const profile = await db.ensureProfile('user-1');
+  await db.upsertAccount({ puuid: OLD, profile_id: profile.id, game_name: 'Rymm3n', tag_line: 'EUW', platform: 'euw1', region: 'europe' });
+  for (let n = 1; n <= 10; n++) {
+    await db.insertRawMatches([{ match_id: `EUW1_${n}`, region: 'europe', game_start: null, payload: old(n, matchJson) }]);
+    await db.upsertAccountMatches([{ ...deriveAccountMatch(old(n, matchJson), OLD), derived_version: 1 }]);
+  }
+  await db.upsertMastery([{ puuid: OLD, champion_id: 20, level: 1, points: 1 }]);
+  acc(db, OLD).backfill_done = true;
+
+  // Nya nyckeln: OLD ger 400, Rymm3n#EUW har nu PUUID P1, och en ny match (11) har spelats
+  const fake = fakeRiot({ history: { [P1]: 11 } });
+  let r;
+  do { r = await syncAccount({ riot: riotWith(fake), db, account: db.t.riot_account[0] }); } while (!r.done);
+  const a = db.t.riot_account[0];
+  assert.equal(a.puuid, P1);
+  assert.deepEqual(a.previous_puuids, [OLD]);
+  assert.equal(r.puuid, P1);
+  assert.equal(db.t.account_match.size, 11);
+  assert.ok([...db.t.account_match.values()].every((x) => x.puuid === P1 && x.derived_version === DERIVED_VERSION));
+  assert.equal(db.t.account_match.get(`${P1}|EUW1_3`).damage_at10, 4000, 'gammal rådata + tidslinje hittar spelaren via gamla PUUID');
+  assert.equal(fake.calls.matches, 1, 'bara den nya matchen hämtades');
+  assert.equal(db.t.death.filter((d) => d.match_id === 'EUW1_3').length, 2);
+
+  // Att koppla kontot igen ger ingen kopia
+  const again = await linkAccount({ riot: riotWith(fake), db, userId: 'user-1', riotId: 'Rymm3n#EUW' });
+  assert.equal(again.already_linked, true);
+  assert.equal(db.t.riot_account.length, 1);
+});
+
+test('ny Riot-nyckel: koppla om ett konto med gammalt PUUID byter PUUID i stället för att göra en kopia', async () => {
+  const OLD = 'o'.repeat(78);
+  const db = memoryDb();
+  const profile = await db.ensureProfile('user-1');
+  await db.upsertAccount({ puuid: OLD, profile_id: profile.id, game_name: 'rymm3n', tag_line: 'euw', platform: 'euw1', region: 'europe' });
+  const r = await linkAccount({ riot: riotWith(fakeRiot()), db, userId: 'user-1', riotId: 'Rymm3n#EUW' });
+  assert.equal(r.already_linked, true);
+  assert.equal(db.t.riot_account.length, 1);
+  assert.deepEqual([db.t.riot_account[0].puuid, db.t.riot_account[0].previous_puuids], [P1, [OLD]]);
+});
