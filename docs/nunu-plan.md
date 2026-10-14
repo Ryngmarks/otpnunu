@@ -3,8 +3,11 @@
 Statistik- och träningsapp för Nunu & Willump: historik från flera Riot-konton,
 matchanalys, en personlig Playbook och på sikt livefunktioner.
 
-Status: **steg 1 (API-test) förberett.** Ingen databas, inga Supabase-inställningar och
-ingen fotbollskod har ändrats.
+**Status**
+- Steg 1 – API-test: **klart** (se avsnitt 5).
+- Fas 1 – Nunu Career: **databas och Edge Function klara och testade lokalt.** Inget är kört i
+  Supabase än. Webbsidan `/nunu/` är nästa steg.
+- Fotbollsappen, dess data och dess tabeller är orörda.
 
 ---
 
@@ -13,209 +16,204 @@ ingen fotbollskod har ändrats.
 | Fråga | Beslut |
 |---|---|
 | Repo | Samma repo som fotbollsappen. Nunu i egna mappar, utvecklas på branchen `nunu/dev`. |
-| Supabase | Samma projekt och samma inloggning (Supabase Auth). |
-| Databas | Ett eget schema: `nunu`. Fler scheman bara vid tydligt behov. |
-| Riot-identitet | **PUUID** är primärnyckel för Riot-konton. Riot ID (namn#tagg) sparas som visningsnamn. |
-| Rådata | Riots ursprungliga matchsvar sparas oförändrade. Importkö och tidslinjelagring väntar tills vi vet datavolymen. |
+| Supabase | Samma projekt och samma inloggning (Supabase Auth). Ingen separat databas – volymen ryms med god marginal (avsnitt 5). |
+| Databas | Ett eget schema: `nunu`. Rådatan skyddas med rättigheter, inte med ett extra schema. |
+| Riot-identitet | **PUUID** är primärnyckel för Riot-konton. Riot ID (namn#tagg) sparas och hålls uppdaterat. |
+| Rådata | Riots matchsvar sparas oförändrade som `jsonb`. Tidslinjer sparas inte i fas 1. |
+| Import | Ingen importkö. Varje synk hämtar upp till 80 saknade matcher; webbsidan fortsätter tills allt är hämtat. |
+| Behörighet | Bara användare i `nunu.member` kan använda Nunu (och därmed Riot-nyckeln). Från början bara johan@ryngmarks.com. |
 | Ordning | Nunu Career → Playbook → matchplanering → Live. |
-| Kodstil | Enkel, modulär, testbar. Inga ramverk, ingen byggprocess – samma stil som fotbollsappen. |
+| Kodstil | Enkel, modulär, testbar. Inga ramverk, ingen byggprocess, inga beroenden. |
 
 ## 2. Arkitektur
 
 ```
-Webbläsare (GitHub Pages)                  Supabase (samma projekt som fotbollen)
-/             fotbollsappen (orörd)        schema public  fotboll + taktik (orört)
-/nunu/        Nunu-appen                   schema nunu    Nunu-tabeller (RLS)
-                 │                                          ▲
-                 │ inloggad användare                       │ service role
-                 └──────────► Edge Function nunu-riot ──────┘
-                                   │  enda delen som har Riot-nyckeln
-                                   ▼
-                              Riot API (europe / euw1)
+Webbläsare (GitHub Pages)                    Supabase (samma projekt som fotbollen)
+/        fotbollsappen (orörd)               schema public  fotboll + taktik (orört)
+/nunu/   Nunu-appen ──── läser egen data ──► schema nunu    Nunu-tabeller (RLS)
+            │                                                 ▲
+            │ "koppla konto" / "synka"                        │ service role
+            └──────────► Edge Function nunu-riot ─────────────┘
+                              │  enda delen som har Riot-nyckeln
+                              ▼
+                         Riot API (europe / euw1)
 ```
 
 ### Moduler
 
-Varje modul har en tydlig uppgift och pratar med de andra bara via databasen.
+Modulerna pratar med varandra bara via databasen.
 
-| Modul | Ansvar | Var |
+| Modul | Ansvar | Filer |
 |---|---|---|
-| **Riot-import** | Enda delen som anropar Riot. Kopplar konton (Riot ID → PUUID), hämtar matcher och mastery, sparar rådata oförändrad. | `supabase/functions/nunu-riot/riot.js`, `import.js` |
-| **Matchanalys** | Rena funktioner: rådata in → statistik ut. Inga anrop, inga sidoeffekter, kan köras om på all rådata. | `supabase/functions/nunu-riot/derive.js` |
-| **Career** (fas 1) | Vyer: profil, konton, historik, mastery, grundstatistik. | `nunu/js/career/` |
-| **Playbook** (fas 2) | Egna anteckningar per matchup, kopplade till matcher. | `nunu/js/playbook/` + egna tabeller |
-| **Matchplanering** (fas 3) | Plan inför match utifrån Playbook och statistik. | `nunu/js/planning/` |
-| **Live** (fas 4) | Insamling under match. Kräver ett litet program på spel-datorn (Riots Live Client Data API finns bara lokalt). | Separat, egen funktion |
+| **Riot-import** | Enda delen som anropar Riot. Kopplar konton, hämtar matcher och mastery, sparar rådata oförändrad, respekterar Riots gränser. | `supabase/functions/nunu-riot/riot.mjs`, `sync.mjs` |
+| **Matchanalys** | Rena funktioner: rådata in → rader ut. Kan köras om på all rådata. | `supabase/functions/nunu-riot/derive.mjs` |
+| **Databas (server)** | De få databasoperationer synken behöver. | `supabase/functions/nunu-riot/db.mjs` |
+| **HTTP** | Inloggning, medlemskap, CORS, fördelning av anrop. | `supabase/functions/nunu-riot/handler.mjs`, `index.ts` |
+| **Career** (fas 1) | Webbsidan: profil, konton, synk, historik, mastery, grundstatistik. | `nunu/` *(nästa steg)* |
+| **Playbook** (fas 2) | Egna anteckningar per matchup. | – |
+| **Matchplanering** (fas 3) | Plan inför match. | – |
+| **Live** (fas 4) | Insamling under match via ett litet program på spel-datorn. | – |
 
-Gemensamt: `nunu/js/core/` (inloggning mot samma Supabase Auth, API-klient, routing).
+`index.ts` är det enda som är Supabase/Deno-specifikt. Allt annat är vanlig JavaScript som
+testas i Node.
 
 ### Mappar
 
 ```
-nunu/                        webbappen → …github.io/Notvikens-t-vlings-app/nunu/
-  index.html
-  css/
-  js/core/  js/career/  …
-  tools/                     testverktyg (API-testet)
-supabase/nunu/               SQL-migreringar, numrerade: 001_init.sql, 002_…
-supabase/functions/nunu-riot/
-docs/nunu-plan.md            den här filen
-.github/workflows/           nunu-riot-api-test.yml (bara på nunu/dev)
+nunu/                              webbappen → …github.io/Notvikens-t-vlings-app/nunu/  (nästa steg)
+  tools/riot-api-test.mjs          API-testet från steg 1
+supabase/nunu/001_init.sql         schemat nunu – körs för hand i SQL Editor
+supabase/nunu/tests/               databastester (SQL) och tester för Edge Function (Node)
+supabase/functions/nunu-riot/      Edge Function
+docs/nunu-plan.md                  den här filen
+.github/workflows/nunu-ci.yml      tester + valfri driftsättning av nunu-riot
+.github/workflows/nunu-riot-api-test.yml
 ```
 
-Fotbollens filer (`index.html`, `css/`, `js/`, `supabase/schema.sql`) ändras inte av Nunu-arbetet.
+## 3. Datamodell
 
-## 3. Datamodell (fas 1)
-
-Allt i schemat `nunu`. Fem tabeller.
+Allt i schemat `nunu`, sex tabeller (`supabase/nunu/001_init.sql`).
 
 ```
-auth.users ──1:1── nunu.profile
-                     id            uuid  pk
-                     user_id       uuid  unik → auth.users
-                     display_name  text
-                     created_at
-                      │
-                      └──1:n── nunu.riot_account
-                                 puuid           text  pk       ← stabil identifierare
-                                 profile_id      uuid  → profile
-                                 game_name, tag_line             (Riot ID, kan ändras av spelaren)
-                                 platform        text  (euw1)
-                                 region          text  (europe)
-                                 linked_at, last_synced_at
-                                  │
-                                  ├──1:n── nunu.account_match     pk (puuid, match_id)
-                                  │          match_id → raw_match
-                                  │          champion_id, queue_id, game_start, duration_s,
-                                  │          team_position, win, kills, deaths, assists, cs,
-                                  │          gold, damage, vision, derived_version
-                                  │
-                                  └──1:n── nunu.mastery            pk (puuid, champion_id)
-                                             level, points, last_play_time,
-                                             payload jsonb (Riots svar), fetched_at
-
-nunu.raw_match                              ← ursprunglig Riot-data, oförändrad
-  match_id    text  pk  (t.ex. EUW1_7123456789)
-  region      text
-  payload     jsonb     (hela svaret från match-v5)
-  fetched_at
+auth.users ──1:1── nunu.member          vem får använda Nunu
+           ──1:1── nunu.profile         id, user_id, display_name
+                     │
+                     └──1:n── nunu.riot_account
+                                puuid (pk), game_name, tag_line, platform, region,
+                                linked_at, last_synced_at, backfill_done
+                                 │
+                                 ├──1:n── nunu.account_match   pk (puuid, match_id)
+                                 │          champion_id, queue_id, game_start, duration_s,
+                                 │          team_position, win, remake, kills, deaths, assists,
+                                 │          cs, gold, damage, vision, opponent_champion_id,
+                                 │          derived_version
+                                 │                 │
+                                 │                 └──► nunu.raw_match   match_id (pk), region,
+                                 │                                       game_start, payload jsonb
+                                 └──1:n── nunu.mastery          pk (puuid, champion_id)
+                                            level, points, last_play_time, payload jsonb
 ```
 
-- **Flera konton, en profil:** en användare har en profil, profilen har valfritt antal Riot-konton.
-  Ett PUUID kan bara höra till en profil (primärnyckel).
-- **Rådata sparas en gång per match**, även om flera av dina konton (eller flera användare) var med.
-  `account_match` pekar på den.
-- **Statistiken kan alltid räknas om** från `raw_match` med nya regler – `derived_version` visar
-  vilken version av analysen som skapat raden.
-- **Väntar tills vi vet volymen:** tidslinjer, mastery-historik över tid och en importkö.
-  API-testet mäter storlekarna.
+- **Flera konton, en profil.** Ett PUUID kan bara höra till en profil.
+- **Rådata en gång per match**, även om flera konton (eller användare) var med.
+- **`account_match` kan alltid räknas om** från `raw_match`; `derived_version` visar vilka regler som gällde.
+- **Remakes** (`remake = true`) och **lägen utan roller** (t.ex. Arena, kö 1750) sparas men räknas
+  inte i statistiken som standard.
+- **`backfill_done`** blir sant när hela historiken är hämtad. Därefter läser synken bara tills den
+  når en redan känd match.
+- **Väntar:** tidslinjer, mastery-historik över tid.
 
-### PUUID – en sak att känna till
+### PUUID
 
-Riots krypterade id:n är kopplade till den registrerade Riot-applikationen. Byter vi till en
-nyckel under en *annan* applikation kan PUUID bli ett annat. Därför sparas även Riot ID, så att
-kontona kan slås upp igen. Inom samma applikation är PUUID stabilt även när spelaren byter namn.
-Detta kontrolleras när vi går från utvecklingsnyckel till personlig nyckel.
+Inom samma Riot-applikation är PUUID stabilt, även när spelaren byter namn (bekräftat i API-testet:
+samma PUUID i alla 20 matcher). Riots krypterade id:n är kopplade till den registrerade
+applikationen, så vid byte till en nyckel under en annan applikation kan PUUID ändras.
+Därför sparas Riot ID också, så att kontona kan slås upp igen.
 
 ## 4. Säkerhet
 
 ### Nycklar
-- **Riot-nyckeln** finns bara som hemlighet: i GitHub Actions (för API-testet) och senare i
-  Edge Function. Aldrig i koden eller i webbläsaren – repot är publikt.
+- **Riot-nyckeln** finns bara som hemlighet: i GitHub Actions och i Edge Function. Aldrig i koden
+  eller i webbläsaren – repot är publikt.
 - **Supabase service role** används bara inuti Edge Function. Webbläsaren har bara den publika nyckeln.
-- **Den läckta `sb_secret_…`-nyckeln** (commit `af79baa`, publik historik) måste vara spärrad
-  i Supabase. Historiken skrivs inte om – spärren är det som skyddar. Se *Manuella steg*.
+- **Den läckta `sb_secret_…`-nyckeln** (commit `af79baa`) måste vara spärrad i Supabase. Historiken
+  skrivs inte om – spärren är det som skyddar.
 
-### Rättigheter i `nunu`
+### Rättigheter i `nunu` (testat – `supabase/nunu/tests/001_rls_test.sql`)
 | Tabell | Webbläsaren (inloggad) | Edge Function |
 |---|---|---|
+| `member` | se sin egen rad | läsa |
 | `profile` | läsa/skapa/ändra **sin egen** | allt |
-| `riot_account` | läsa **sina egna** | koppla konton |
+| `riot_account` | läsa och koppla bort **sina egna** | koppla konton, uppdatera |
 | `account_match`, `mastery` | läsa **sina egna** | skriva |
-| `raw_match` | **ingen åtkomst** (inga `grant`) | läsa/skriva |
+| `raw_match` | **ingen åtkomst** | läsa/skriva |
 
-- Radskydd (RLS) på alla tabeller: `profile.user_id = auth.uid()`.
-- `anon` får inga rättigheter alls i `nunu`.
-- Edge Function kontrollerar inloggningen och att kontot tillhör användaren innan något hämtas.
+- Radskydd (RLS) på alla tabeller. `anon` har ingen åtkomst alls till schemat.
+- Edge Function kontrollerar inloggningen (Supabase Auth) och medlemskapet innan något görs,
+  och synkar bara konton som tillhör användaren.
+- CORS släpper bara in GitHub Pages (och localhost för utveckling).
 
 ### Fotbollsdatan
-I dag släpper fotbollstabellerna in **alla inloggade**. Det är okej så länge bara fotbollens
-användare har konton. **Innan någon annan än fotbollens användare får ett konto** (t.ex. en
-kompis till Nunu) ska fotbollen få en medlemslista:
-
-1. Ny tabell `public.football_members (user_id)` – fyll med alla nuvarande konton **först**.
-2. Byt fotbollstabellernas regler från "alla inloggade" till "medlem".
-3. Fotbollsappen visar "Ingen behörighet" för inloggade som inte är medlemmar.
-
-Ingen data ändras – bara behörigheten. Testas i lokal Postgres och webbläsare innan det körs.
-Görs som eget steg med eget godkännande. Taktiktavlan har redan en egen behörighetslista.
+Fotbollstabellerna släpper i dag in alla inloggade. Det är okej så länge bara fotbollens användare
+har konton. **Innan någon annan får ett konto** ska fotbollen få en medlemslista
+(`public.football_members`), med nuvarande konton inlagda först. Eget steg, eget godkännande.
 
 ### Övrigt
 - Egen registrering i Supabase Auth förblir avstängd. Konton skapas av dig.
-- GitHub Actions-loggar är publika i ett publikt repo. API-testets rapport innehåller bara
-  ditt Riot ID, ett maskerat PUUID och dina egna matchresultat – inga andra spelares namn.
+- GitHub Actions-loggar är publika. API-testets rapport visar bara ditt Riot ID, ett maskerat
+  PUUID och dina egna matchresultat.
 
-## 5. Utvecklingsordning
+## 5. Steg 1 – API-test (klart 2026-10-14)
 
-### Steg 1 – API-test *(förberett)*
-Mål: veta vad Riot faktiskt ger och hur mycket data det blir, innan vi bygger databasen.
+`nunu/tools/riot-api-test.mjs` mot **Rymm3n#EUW** med utvecklingsnyckel:
 
-`nunu/tools/riot-api-test.mjs` hämtar för **Rymm3n#EUW**:
-- kontot → PUUID
-- antal tillgängliga match-id:n (max 1 000, bara id:n)
-- **de senaste 20 matcherna** i sin helhet
-- **en tidslinje** – bara för att mäta storleken
-- **champion mastery** för Nunu & Willump (id 20) och totalt
+| Mätning | Resultat |
+|---|---|
+| PUUID | Samma i alla 20 matcher |
+| Tillgänglig historik | 771 match-id:n |
+| Nunu & Willump | 17 av de 20 senaste; mastery nivå 178, 1 930 343 poäng (plats 1 av 166) |
+| Köer | 420 (solo), 440 (flex), 400 (normal draft), 1750 (Arena-läge, inga roller) |
+| Match, snitt | 84 KB rå JSON, 11 KB komprimerad |
+| Hela historiken | ~65 MB rå (Postgres komprimerar stora jsonb-fält) |
+| En tidslinje | 919 KB rå, 79 KB komprimerad → ~700 MB för hela historiken |
+| Anrop | 33 på 10 s, inga 429; gräns 20/s och 100/2 min |
 
-26–35 anrop beroende på hur lång historiken är – under Riots gräns för utvecklingsnycklar (100 per 2 minuter).
-Inget sparas i Supabase. Rapporten visar bl.a. storlek per match (rå och komprimerad),
-uppskattning per 1 000 matcher, historikens djup, Nunu-matcher och mastery.
+**Slutsatser**
+1. Rådata för matcher lagras som `jsonb` i databasen – ryms med god marginal i gratisnivåns 500 MB.
+2. Tidslinjer ryms inte i databasen. Om/när de behövs: bara Nunu-matcher, komprimerade, i Storage.
+3. Hela historiken tar ~16 min att hämta (Riots gräns) → synk i omgångar om 80, ingen kö.
+4. Remakes (t.ex. 0/0/0 med 0–4 CS) och Arena filtreras bort ur statistiken men sparas som rådata.
 
-Körs i GitHub Actions (`.github/workflows/nunu-riot-api-test.yml`) eller lokalt:
-```bash
-RIOT_API_KEY=RGAPI-… node nunu/tools/riot-api-test.mjs              # bara rapport
-RIOT_API_KEY=RGAPI-… node nunu/tools/riot-api-test.mjs --save ./raw # sparar rå JSON lokalt
-node --test "nunu/tools/*.test.mjs"                                  # enhetstester, ingen nyckel behövs
-```
+## 6. Fas 1 – Nunu Career
 
-**Beslut efter testet:** hur rådatan lagras (jsonb i databasen räcker troligen för matcher),
-om/hur tidslinjer sparas, hur långt bak importen ska gå och om en importkö behövs.
+### Klart (testat lokalt)
+1. **`supabase/nunu/001_init.sql`** – schemat, sex tabeller, rättigheter och radskydd.
+   24 databastester i Postgres 16: egen data syns, andras inte, rådatan är stängd, `anon` utestängd,
+   fotbollen orörd, går att köra flera gånger.
+2. **Edge Function `nunu-riot`**
+   - `POST { action: "link", riotId: "Rymm3n#EUW", platform: "euw1" }` – kopplar ett konto.
+   - `POST { action: "sync" }` – synkar mastery och upp till 80 saknade matcher per konto.
+     Svarar `{ results, done, retryAfter }`; webbsidan anropar igen tills `done` är sant
+     (och väntar `retryAfter` sekunder om Riot bett om det).
+   - 20 enhetstester mot en låtsas-Riot och en minnesdatabas, typkontroll i Deno.
 
-### Steg 2 – Nunu Career (fas 1)
-1. `supabase/nunu/001_init.sql`: schemat och de fem tabellerna med rättigheter. Testas i lokal Postgres
-   (egen användare ser sitt, annan användare ser inget, `raw_match` stängd).
-2. Edge Function `nunu-riot`: koppla konto, synka de senaste matcherna, hämta mastery.
-   Testas mot en låtsas-Riot.
-3. `derive.js`: rådata → `account_match`. Testas mot de riktiga matcherna från steg 1.
-4. `/nunu/`: inloggning, profil med konton, knappen Synka, översikt (matcher, vinstprocent, KDA,
-   CS/min, mastery per konto och totalt), matchlista.
+### Kvar i fas 1
+3. Webbsidan `/nunu/`: inloggning (samma konto som fotbollen), profil med konton, knappen Synka
+   med förlopp, översikt (matcher, vinstprocent, KDA, CS/min, mastery per konto och totalt),
+   matchlista med filter för kö.
+4. Kör allt mot Supabase och verifiera med riktig data.
 
-Klart när: du kan koppla två konton, synka, och se samlad statistik – och en annan användare ser ingenting.
+**Klart när:** du kan koppla två konton, synka hela historiken och se samlad statistik –
+och en annan användare ser ingenting.
 
 ### Senare faser
 - **Fas 2 – Playbook:** anteckningar per matchup/motståndarjungler, taggar, koppling till matcher.
-- **Fas 3 – Matchplanering:** plan inför match utifrån Playbook och statistik. Tidslinjeanalys
-  (first clear, objectives, guldskillnad) om datavolymen tillåter.
-- **Fas 4 – Live:** "spelar just nu" via Riots spectator-API, därefter ett lokalt hjälpprogram.
-  Bara funktioner som följer Riots regler (ingen otillåten fördel under match).
+- **Fas 3 – Matchplanering:** plan inför match. Tidslinjeanalys om/när tidslinjer sparas.
+- **Fas 4 – Live:** "spelar just nu" via Riots spectator-API, därefter ett lokalt hjälpprogram –
+  bara funktioner som följer Riots regler.
 
-## 6. Manuella steg
+## 7. Driftsättning
 
-### Före API-testet
-- [ ] **Riot-nyckel:** logga in på <https://developer.riotgames.com> med ditt Riot-konto och kopiera
-      *Development API Key* (gäller 24 timmar).
-- [ ] **GitHub secret:** repot → *Settings → Secrets and variables → Actions → New repository secret*.
-      Namn `RIOT_API_KEY`, värde = nyckeln.
-- [ ] **Kör testet:** *Actions → Nunu – Riot API-test →* senaste körningen *→ Re-run all jobs*.
-      Resultatet står under *Summary*.
+| Del | Hur |
+|---|---|
+| Databas | **För hand:** kör `supabase/nunu/001_init.sql` i SQL Editor. SQL körs aldrig automatiskt. |
+| Edge Function | **Automatiskt** via `nunu-ci.yml` när secret `SUPABASE_ACCESS_TOKEN` finns – annars bara tester. Riot-nyckeln förs över från GitHub-secret `RIOT_API_KEY`. |
+| Webbsida | GitHub Pages, när `nunu/dev` förs över till deploy-branchen. |
 
-### Före fas 1
+`SUPABASE_ACCESS_TOKEN` ger tillgång till alla dina Supabase-projekt (även matappens). Alternativet
+är att driftsätta för hand med Supabase CLI från en dator.
+
+## 8. Manuella steg
+
+### Före driftsättning av fas 1
 - [ ] Spärra den läckta `sb_secret_…`-nyckeln: Supabase → *Project Settings → API Keys → Secret keys*.
 - [ ] Slå på *Secret scanning* och *Push protection*: GitHub → *Settings → Code security*.
-- [ ] Kontrollera Supabase: inga okända tabeller, vilka användare som finns, att egen registrering är avstängd.
+- [ ] Kör `supabase/nunu/001_init.sql` i Supabase SQL Editor.
 - [ ] Lägg till `nunu` under Supabase → *Settings → Data API → Exposed schemas*.
-- [ ] Ansök om en **Personal API Key** hos Riot (registrera produkten). Krävs för synk som inte
-      dör efter 24 timmar. Godkännandet kan ta tid – ansök tidigt.
+- [ ] Skapa en Supabase access token (*Account → Access Tokens*) och lägg in den som GitHub-secret
+      `SUPABASE_ACCESS_TOKEN` – eller välj manuell driftsättning.
+- [ ] Ansök om en **Personal API Key** hos Riot (*Register Product*). Utvecklingsnyckeln gäller bara
+      24 timmar och måste annars förnyas i GitHub-secret `RIOT_API_KEY` före varje användning.
 
 ### Innan någon annan än fotbollens användare får konto
 - [ ] Medlemslista för fotbollsdatan (avsnitt 4).
