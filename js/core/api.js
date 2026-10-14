@@ -1,6 +1,6 @@
 /*
  * Nunu – inloggning och dataåtkomst.
- *   - Supabase Auth: samma konton som fotbollsappen, men en egen inloggningssession.
+ *   - Supabase Auth: konton skapas av administratören (ingen egen registrering).
  *   - Supabase REST (schemat nunu): läser bara användarens egen data (radskydd i databasen).
  *   - Edge Function nunu-riot: koppla konton och synka från Riot.
  */

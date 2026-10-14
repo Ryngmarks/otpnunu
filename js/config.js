@@ -1,5 +1,5 @@
 /*
- * Supabase-inställningar. Lämnas fälten tomma körs appen i demo-läge.
+ * Supabase-inställningar för Nunu Career.
  *
  * Hitta värdena i Supabase-projektet (eller via knappen "Connect" högst upp):
  *   SUPABASE_URL  Project Settings → Data API → Project URL

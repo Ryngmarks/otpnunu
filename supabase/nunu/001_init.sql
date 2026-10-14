@@ -2,7 +2,7 @@
 -- Nunu – fas 1 (Career): schema, tabeller och rättigheter.
 --
 -- Kör i Supabase: SQL Editor → New query → klistra in → Run.
--- Rör bara schemat "nunu" – fotbollens tabeller i "public" påverkas inte.
+-- Rör bara schemat "nunu".
 -- Går att köra flera gånger.
 --
 -- Efteråt: Settings → Data API → Exposed schemas → lägg till "nunu".

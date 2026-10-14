@@ -10,9 +10,6 @@ $PSQL -d postgres -c "create database $DB"
 trap '$PSQL -d postgres -c "drop database if exists $DB" >/dev/null' EXIT
 
 $PSQL -d "$DB" -f supabase-stub.sql
-# Fotbollen först, med lite data – så att vi ser att Nunu inte rör den
-$PSQL -d "$DB" -f ../../schema.sql 2>/dev/null
-$PSQL -d "$DB" -c "insert into public.players (name) values ('Johan'), ('Erik')"
 # Användare finns innan 001 körs (så att johan@ryngmarks.com blir medlem)
 $PSQL -d "$DB" -c "insert into auth.users (id, email) values
   ('aaaaaaaa-0000-0000-0000-000000000001', 'Johan@Ryngmarks.com'),

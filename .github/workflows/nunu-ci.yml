@@ -12,9 +12,8 @@ on:
     paths:
       - 'supabase/nunu/**'
       - 'supabase/functions/nunu-riot/**'
-      - 'supabase/schema.sql'
-      - 'nunu/js/**'
-      - 'nunu/tests/**'
+      - 'js/**'
+      - 'tests/**'
       - '.github/workflows/nunu-ci.yml'
   workflow_dispatch:
 
@@ -44,7 +43,7 @@ jobs:
         run: node --test "supabase/nunu/tests/*.test.mjs"
 
       - name: Enhetstester (webbsidan)
-        run: node --test "nunu/tests/*.test.mjs"
+        run: node --test "tests/*.test.mjs"
 
       - uses: denoland/setup-deno@v2
         with:

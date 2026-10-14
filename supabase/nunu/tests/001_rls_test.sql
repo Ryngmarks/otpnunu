@@ -92,10 +92,4 @@ select t.eq((select count(*) from nunu.account_match), 2, 'bortkopplat konto tar
 reset role;
 select t.eq((select count(*) from nunu.raw_match), 3, 'rådatan finns kvar efter bortkoppling');
 
--- ---------- Fotbollen orörd ----------
-select t.eq((select count(*) from information_schema.tables where table_schema = 'public'
-             and table_name in ('players', 'training_sessions', 'results', 'tactics', 'tactics_access')), 5,
-            'fotbollens tabeller finns kvar i public');
-select t.eq((select count(*) from public.players), 2, 'fotbollens data orörd');
-
 \echo 'ALLA SQL-TESTER GODKÄNDA'

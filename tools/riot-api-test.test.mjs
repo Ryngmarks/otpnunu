@@ -1,4 +1,4 @@
-// Tester för riot-api-test.mjs mot en låtsas-Riot. Kör: node --test "nunu/tools/*.test.mjs"
+// Tester för riot-api-test.mjs mot en låtsas-Riot. Kör: node --test "tools/*.test.mjs"
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {

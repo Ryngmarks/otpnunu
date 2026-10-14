@@ -2,7 +2,7 @@
 /*
  * Lokal utvecklingsserver för Nunu – kör hela appen utan Supabase och utan Riot-nyckel.
  *
- *   node nunu/tests/dev-server.mjs          → http://localhost:8787/nunu/
+ *   node tests/dev-server.mjs          → http://localhost:8787/
  *   Logga in: johan@nik.se / nunu123  (medlem)   ·   anna@nik.se / nunu123 (ej medlem)
  *   Koppla t.ex. Rymm3n#EUW och Smurf#EUW.
  *
@@ -17,10 +17,10 @@ import { readFile } from 'node:fs/promises';
 import { join, extname, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
-import { createHandler } from '../../supabase/functions/nunu-riot/handler.mjs';
-import { createRiot } from '../../supabase/functions/nunu-riot/riot.mjs';
+import { createHandler } from '../supabase/functions/nunu-riot/handler.mjs';
+import { createRiot } from '../supabase/functions/nunu-riot/riot.mjs';
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 /* ---------------- Låtsas-Riot ---------------- */
 
@@ -299,7 +299,7 @@ export function createDevServer({ port = 8787, riot = createFakeRiot(), store = 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const dev = createDevServer({ port: Number(process.env.PORT) || 8787 });
   dev.listen().then((base) => {
-    console.log(`Nunu dev-server: ${base}/nunu/`);
+    console.log(`Nunu dev-server: ${base}/`);
     console.log('Logga in: johan@nik.se / nunu123   (anna@nik.se / nunu123 är inte medlem)');
     console.log('Koppla: Rymm3n#EUW och Smurf#EUW');
   });

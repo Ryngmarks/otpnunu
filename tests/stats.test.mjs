@@ -1,4 +1,4 @@
-// Tester för Nunu Career-statistiken. Kör: node --test "nunu/tests/*.test.mjs"
+// Tester för Nunu Career-statistiken. Kör: node --test "tests/*.test.mjs"
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { filterMatches, summarize, recentForm, byAccount, opponents, masterySummary, queueLabel, QUEUE_FILTERS } from '../js/career/stats.js';

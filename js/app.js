@@ -1,722 +1,239 @@
-(function () {
-  'use strict';
+/*
+ * Nunu Career – startpunkt. Kopplar ihop inloggning, data, filter, synk och rendering.
+ */
+import { createApi, ApiError } from './core/api.js';
+import { loadChampions } from './core/ddragon.js';
+import { NUNU, QUEUE_FILTERS, filterMatches, summarize, recentForm, byAccount, opponents, masterySummary } from './career/stats.js';
+import { esc, heroHtml, tilesHtml, formHtml, accountsHtml, opponentsHtml, matchesHtml } from './career/view.js';
 
-  const TEAM = { name: 'Notvikens IK', sub: 'Träningsligan' };
-  const GAME_TYPES = {
-    small: { label: 'Small game', format: '5v5' },
-    medium: { label: 'Medium game', format: '7v7' },
-    large: { label: 'Large game', format: '11v11' },
-  };
-  // Separat nyckel per läge så att en demo-träning aldrig skickas till Supabase
-  const ACTIVE_KEY = `notviken-active-training-${Store.mode}`;
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => [...document.querySelectorAll(s)];
+const cfg = window.APP_CONFIG || {};
+const FILTER_KEY = 'nunu-filters';
+const PAGE = 20;
 
-  const $ = (sel, root = document) => root.querySelector(sel);
-  const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
-  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const today = () => new Date().toLocaleDateString('sv-SE');
-  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const state = {
+  profile: null,
+  accounts: [],
+  matches: [],
+  mastery: [],
+  champs: { name: (id) => `#${id}`, icon: () => null },
+  filters: { champion: 'nunu', queue: 'rift', account: '' },
+  limit: PAGE,
+  syncing: false,
+  cancelSync: false,
+};
+try { Object.assign(state.filters, JSON.parse(localStorage.getItem(FILTER_KEY))); } catch (e) { /* ignorera */ }
 
-  const state = {
-    tacticsAllowed: false,
-    players: [],
-    sessions: [],
-    results: [],
-    filter: 'total',
-    flow: {
-      step: '1',
-      selected: new Set(),
-      gameType: null,
-      marks: new Map(), // player_id -> 'win' | 'loss'
-    },
-    active: loadActive(), // { sessionId, date, participants: [], rounds }
-  };
+let api;
 
-  /* ---------------- Pågående träning ---------------- */
+/* ---------------- Hjälpare ---------------- */
 
-  function loadActive() {
-    try {
-      const a = JSON.parse(localStorage.getItem(ACTIVE_KEY));
-      if (a && a.date === today()) return a;
-    } catch (e) { /* ignorera */ }
-    return null;
-  }
-  function saveActive() {
-    try {
-      if (state.active) localStorage.setItem(ACTIVE_KEY, JSON.stringify(state.active));
-      else localStorage.removeItem(ACTIVE_KEY);
-    } catch (e) { /* ignorera */ }
-  }
+let toastTimer;
+function toast(msg) {
+  const el = $('[data-toast]');
+  el.textContent = msg;
+  el.classList.add('is-visible');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('is-visible'), 3200);
+}
 
-  /* ---------------- Data ---------------- */
+function fail(err) {
+  // Förväntade fel (fel Riot ID, ingen åtkomst …) visas bara för användaren
+  if (!(err instanceof ApiError) || err.status >= 500 || !err.status) console.error(err);
+  if (err instanceof ApiError && err.status === 401) { showLogin('Du har loggats ut – logga in igen'); return; }
+  toast(navigator.onLine === false ? 'Ingen internetanslutning' : err.message || 'Något gick fel');
+}
 
-  async function refresh() {
-    const [players, sessions, results] = await Promise.all([
-      Store.listPlayers(), Store.listSessions(), Store.listResults(),
-    ]);
-    state.players = players;
-    state.sessions = sessions;
-    state.results = results;
-  }
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-  function computeBoard(filter) {
-    const rows = filter === 'total' ? state.results : state.results.filter((r) => r.game_type === filter);
-    const byPlayer = new Map();
-    const sessions = new Set();
-    const rounds = new Set();
-    for (const r of rows) {
-      sessions.add(r.training_session_id);
-      rounds.add(r.training_session_id + '|' + r.created_at);
-      let s = byPlayer.get(r.player_id);
-      if (!s) byPlayer.set(r.player_id, (s = { wins: 0, losses: 0 }));
-      r.result === 'win' ? s.wins++ : s.losses++;
-    }
-    const list = state.players
-      .filter((p) => byPlayer.has(p.id))
-      .map((p) => ({ id: p.id, name: p.name, active: p.active, ...byPlayer.get(p.id) }))
-      .sort((a, b) => b.wins - a.wins || a.losses - b.losses || a.name.localeCompare(b.name, 'sv'));
-    return {
-      list,
-      stats: { trainings: sessions.size, rounds: rounds.size, players: list.length },
-    };
-  }
+/* ---------------- Vyer ---------------- */
 
-  /* ---------------- Animerade siffror ---------------- */
+function show(view) {
+  document.body.classList.toggle('is-locked', view !== 'app');
+  $('[data-login]').hidden = view !== 'login';
+  $('[data-denied]').hidden = view !== 'denied';
+  $('[data-app]').hidden = view !== 'app';
+}
 
-  function countTo(el, to) {
-    const from = Number(el.dataset.value || 0);
-    el.dataset.value = to;
-    if (reduceMotion || from === to) { el.textContent = to; return; }
-    const start = performance.now();
-    const dur = 650;
-    const tick = (now) => {
-      const t = Math.min(1, (now - start) / dur);
-      const e = 1 - Math.pow(1 - t, 3);
-      el.textContent = Math.round(from + (to - from) * e);
-      if (t < 1) requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
-  }
+function showLogin(message) {
+  Object.assign(state, { profile: null, accounts: [], matches: [], mastery: [] });
+  show('login');
+  const err = $('[data-login-error]');
+  err.textContent = message || '';
+  err.hidden = !message;
+  $('[data-login-form] [name=password]').value = '';
+}
 
-  /* ---------------- Leaderboard ---------------- */
+/* ---------------- Rendering ---------------- */
 
-  function renderBoard() {
-    const { list, stats } = computeBoard(state.filter);
-    countTo($('[data-stat="trainings"]'), stats.trainings);
-    countTo($('[data-stat="rounds"]'), stats.rounds);
-    countTo($('[data-stat="players"]'), stats.players);
+function render() {
+  const f = state.filters;
+  const champion = f.champion === 'nunu' ? NUNU : null;
+  const queues = QUEUE_FILTERS[f.queue] ? QUEUE_FILTERS[f.queue].queues : null;
+  const rows = filterMatches(state.matches, { champion, queues, puuid: f.account || null });
+  const accountRows = filterMatches(state.matches, { champion, queues });
 
-    // Stapelns längd = spelade omgångar relativt den som spelat mest
-    const max = Math.max(1, ...list.map((p) => p.wins + p.losses));
-    const ol = $('[data-board]');
-    $('[data-board-empty]').hidden = list.length > 0;
+  const first = state.accounts[0];
+  $('[data-profile-name]').textContent = (state.profile && state.profile.display_name)
+    || (first ? `${first.game_name}#${first.tag_line}` : 'Välkommen');
+  $('[data-user-email]').textContent = api.email;
+  $('[data-action="sync"]').disabled = !state.accounts.length || state.syncing;
 
-    // FLIP: kom ihåg gamla positioner så att raderna glider till nya platser
-    const existing = new Map($$('.lb-row', ol).map((el) => [el.dataset.id, el]));
-    const before = new Map();
-    existing.forEach((el, id) => before.set(id, el.getBoundingClientRect().top));
+  const mastery = masterySummary(f.account ? state.mastery.filter((m) => m.puuid === f.account) : state.mastery);
+  $('[data-hero]').innerHTML = heroHtml(mastery, state.accounts);
+  $('[data-tiles]').innerHTML = tilesHtml(summarize(rows));
+  $('[data-form]').innerHTML = formHtml(recentForm(rows));
+  $('[data-matches]').innerHTML = matchesHtml(rows, state.champs, state.accounts, state.limit);
+  $('[data-opponents]').innerHTML = opponentsHtml(opponents(rows), state.champs);
+  $('[data-accounts]').innerHTML = accountsHtml(byAccount(accountRows, state.accounts), state.mastery);
 
-    const keep = new Set();
-    list.forEach((p, i) => {
-      let li = existing.get(p.id);
-      const isNew = !li;
-      if (isNew) {
-        li = document.createElement('li');
-        li.className = 'lb-row';
-        li.dataset.id = p.id;
-        li.innerHTML = `
-          <span class="lb-num lb-num--win" data-wins>0</span>
-          <div class="lb-main">
-            <b class="lb-rank"></b>
-            <span class="lb-player"></span>
-            <small class="lb-pct"></small>
-            <span class="lb-bar"><i class="lb-bar__win"></i><i class="lb-bar__loss"></i></span>
-          </div>
-          <span class="lb-num lb-num--loss" data-losses>0</span>`;
-        li.style.setProperty('--delay', `${Math.min(i, 14) * 40}ms`);
-        li.classList.add('is-entering');
-      }
-      keep.add(p.id);
-      const rank = i + 1;
-      li.classList.toggle('is-top1', rank === 1);
-      li.classList.toggle('is-top2', rank === 2);
-      li.classList.toggle('is-top3', rank === 3);
-      li.classList.toggle('is-inactive', !p.active);
-      $('.lb-rank', li).textContent = rank;
-      $('.lb-player', li).textContent = p.name;
-      const games = p.wins + p.losses;
-      $('.lb-pct', li).textContent = games ? `${Math.round((p.wins / games) * 100)}%` : '';
-      ol.appendChild(li);
+  // Filterkontroller
+  $$('[data-champion]').forEach((b) => b.classList.toggle('is-active', b.dataset.champion === f.champion));
+  $('[data-filter-queue]').innerHTML = Object.entries({ ...QUEUE_FILTERS, all: { label: 'Alla lägen' } })
+    .map(([k, q]) => `<button data-queue="${k}" class="${f.queue === k ? 'is-active' : ''}">${q.label}</button>`).join('');
+  const sel = $('[data-filter-account]');
+  sel.hidden = state.accounts.length < 2;
+  sel.innerHTML = `<option value="">Alla konton</option>${state.accounts.map((a) =>
+    `<option value="${esc(a.puuid)}" ${a.puuid === f.account ? 'selected' : ''}>${esc(a.game_name)}#${esc(a.tag_line)}</option>`).join('')}`;
+}
 
-      const setBars = () => {
-        $('.lb-bar__win', li).style.setProperty('--p', p.wins / max);
-        $('.lb-bar__loss', li).style.setProperty('--p', p.losses / max);
-        countTo($('[data-wins]', li), p.wins);
-        countTo($('[data-losses]', li), p.losses);
-      };
-      if (isNew) {
-        // starta från 0 för att få in-animationen på staplarna
-        requestAnimationFrame(() => requestAnimationFrame(setBars));
+async function reload() {
+  const [accounts, matches, mastery] = await Promise.all([api.accounts(), api.matches(), api.mastery()]);
+  Object.assign(state, { accounts, matches, mastery });
+  if (state.filters.account && !accounts.some((a) => a.puuid === state.filters.account)) state.filters.account = '';
+  render();
+}
+
+/* ---------------- Synk ---------------- */
+
+function syncStatus({ title, detail, progress, waiting = false }) {
+  const box = $('[data-sync]');
+  box.hidden = false;
+  box.classList.toggle('is-waiting', waiting);
+  $('[data-sync-title]').textContent = title;
+  $('[data-sync-detail]').textContent = detail || '';
+  $('[data-sync-bar]').style.width = `${Math.round((progress || 0) * 100)}%`;
+}
+
+async function sync() {
+  if (state.syncing) return;
+  state.syncing = true;
+  state.cancelSync = false;
+  render();
+  let imported = 0;
+  try {
+    syncStatus({ title: 'Synkar…', detail: 'Hämtar från Riot', progress: 0.02 });
+    while (!state.cancelSync) {
+      const r = await api.riot({ action: 'sync' });
+      imported += r.results.reduce((s, x) => s + x.imported, 0);
+      const remaining = r.results.reduce((s, x) => s + x.remaining, 0);
+      await reload();
+      const progress = imported / Math.max(1, imported + remaining);
+      if (r.done) break;
+      if (r.retryAfter) {
+        // Riots gräns: vänta och fortsätt automatiskt
+        for (let s = r.retryAfter; s > 0 && !state.cancelSync; s--) {
+          syncStatus({ title: `Hämtat ${imported} matcher`, detail: `${remaining} kvar · Riot begränsar takten – fortsätter om ${s} s`, progress, waiting: true });
+          await sleep(1000);
+        }
       } else {
-        setBars();
+        syncStatus({ title: `Hämtat ${imported} matcher`, detail: `${remaining} kvar`, progress });
       }
-    });
-
-    existing.forEach((el, id) => { if (!keep.has(id)) el.remove(); });
-
-    if (!reduceMotion) {
-      $$('.lb-row', ol).forEach((el) => {
-        const old = before.get(el.dataset.id);
-        if (old === undefined) return;
-        const dy = old - el.getBoundingClientRect().top;
-        if (!dy) return;
-        el.style.transition = 'none';
-        el.style.transform = `translateY(${dy}px)`;
-        requestAnimationFrame(() => {
-          el.style.transition = '';
-          el.style.transform = '';
-        });
-      });
     }
-    setTimeout(() => $$('.lb-row.is-entering', ol).forEach((el) => el.classList.remove('is-entering')), 1200);
-
-    renderActiveBanner();
+    toast(state.cancelSync ? `Synk avbruten – ${imported} matcher hämtade` : imported ? `Klart! ${imported} nya matcher` : 'Allt är redan uppdaterat');
+  } catch (err) {
+    fail(err);
+  } finally {
+    state.syncing = false;
+    $('[data-sync]').hidden = true;
+    render();
   }
+}
 
-  function setFilter(value) {
-    state.filter = value;
-    const buttons = $$('[data-filter] button');
-    buttons.forEach((b) => b.classList.toggle('is-active', b.dataset.filterValue === value));
-    moveIndicator();
-    renderBoard();
-  }
+/* ---------------- Händelser ---------------- */
 
-  function moveIndicator() {
-    const nav = $('[data-filter]');
-    const active = $('button.is-active', nav);
-    const ind = $('.segmented__indicator', nav);
-    ind.style.width = active.offsetWidth + 'px';
-    ind.style.transform = `translateX(${active.offsetLeft}px)`;
-  }
+function saveFilters() {
+  state.limit = PAGE;
+  try { localStorage.setItem(FILTER_KEY, JSON.stringify(state.filters)); } catch (e) { /* ignorera */ }
+  render();
+}
 
-  function renderActiveBanner() {
-    const el = $('[data-active-training]');
-    const a = state.active;
-    el.hidden = !a;
-    if (a) {
-      $('[data-active-training-info]').textContent =
-        `${a.participants.length} spelare · ${a.rounds} ${a.rounds === 1 ? 'omgång' : 'omgångar'}`;
-    }
-  }
-
-  /* ---------------- Ny träning ---------------- */
-
-  function activePlayers() {
-    return state.players
-      .filter((p) => p.active)
-      .sort((a, b) => a.name.localeCompare(b.name, 'sv'));
-  }
-
-  function startFlow() {
-    const f = state.flow;
-    f.marks = new Map();
-    f.gameType = null;
-    if (state.active) {
-      f.selected = new Set(state.active.participants);
-      goStep('2');
-    } else {
-      f.selected = new Set();
-      goStep('1');
-    }
-  }
-
-  function goStep(step) {
-    state.flow.step = step;
-    $$('[data-step]').forEach((el) => { el.hidden = el.dataset.step !== step; });
-    const n = step === 'done' ? 4 : Number(step);
-    $$('[data-step-dot]').forEach((el) => {
-      const d = Number(el.dataset.stepDot);
-      el.classList.toggle('is-current', d === n);
-      el.classList.toggle('is-done', d < n);
-    });
-    const round = (state.active ? state.active.rounds : 0) + 1;
-    $$('[data-round-label]').forEach((el) => {
-      el.textContent = step === '1' && !state.active ? 'Ny träning' : `Omgång ${round}`;
-    });
-    if (step === '1') renderPick();
-    if (step === '2') renderGameTypes();
-    if (step === '3') renderResults();
-    window.scrollTo({ top: 0 });
-  }
-
-  function renderPick() {
-    const grid = $('[data-pick-grid]');
-    const sel = state.flow.selected;
-    grid.innerHTML = activePlayers()
-      .map((p) => `
-        <button class="pick ${sel.has(p.id) ? 'is-selected' : ''}" data-pick="${p.id}" aria-pressed="${sel.has(p.id)}">
-          <span class="pick__check"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
-          <span class="pick__name">${esc(p.name)}</span>
-        </button>`)
-      .join('');
-    updatePickBar();
-  }
-
-  function updatePickBar() {
-    const n = state.flow.selected.size;
-    $('[data-selected-count]').textContent = n;
-    $('[data-action="to-step-2"]').disabled = n < 2;
-    const all = activePlayers().every((p) => state.flow.selected.has(p.id));
-    $('[data-action="toggle-all"]').textContent = all ? 'Avmarkera alla' : 'Markera alla';
-  }
-
-  function renderGameTypes() {
-    $$('[data-game-type]').forEach((b) =>
-      b.classList.toggle('is-last', !!state.active && state.active.lastGameType === b.dataset.gameType));
-  }
-
-  function renderResults() {
-    const f = state.flow;
-    const ids = Array.from(f.selected);
-    const players = state.players.filter((p) => ids.includes(p.id)).sort((a, b) => a.name.localeCompare(b.name, 'sv'));
-    const t = GAME_TYPES[f.gameType];
-    $('[data-step="3"] .flow-title').innerHTML = `Vem vann? <span class="tag">${t.format}</span>`;
-    $('[data-result-list]').innerHTML = players
-      .map((p) => {
-        const m = f.marks.get(p.id) || '';
-        return `
-        <li class="result-row ${m ? 'is-' + m : ''}" data-result-row="${p.id}">
-          <span class="result-row__name">${esc(p.name)}</span>
-          <span class="wl">
-            <button class="wl__btn wl__btn--win ${m === 'win' ? 'is-on' : ''}" data-mark="win">Win</button>
-            <button class="wl__btn wl__btn--loss ${m === 'loss' ? 'is-on' : ''}" data-mark="loss">Loss</button>
-          </span>
-        </li>`;
-      })
-      .join('');
-    updateResultBar();
-  }
-
-  function setMark(row, mark) {
-    const id = row.dataset.resultRow;
-    const marks = state.flow.marks;
-    if (marks.get(id) === mark) marks.delete(id);
-    else marks.set(id, mark);
-    const m = marks.get(id) || '';
-    row.classList.toggle('is-win', m === 'win');
-    row.classList.toggle('is-loss', m === 'loss');
-    $('.wl__btn--win', row).classList.toggle('is-on', m === 'win');
-    $('.wl__btn--loss', row).classList.toggle('is-on', m === 'loss');
-    updateResultBar();
-  }
-
-  function updateResultBar() {
-    let w = 0, l = 0;
-    state.flow.marks.forEach((v) => (v === 'win' ? w++ : l++));
-    $('[data-count-win]').textContent = w;
-    $('[data-count-loss]').textContent = l;
-    $('[data-action="save-round"]').disabled = w + l === 0;
-  }
-
-  async function saveRound() {
-    const f = state.flow;
-    const btn = $('[data-action="save-round"]');
-    btn.disabled = true;
-    try {
-      if (!state.active) {
-        const session = await Store.createSession(today());
-        state.active = { sessionId: session.id, date: today(), participants: [], rounds: 0 };
-      }
-      const entries = Array.from(f.marks, ([player_id, result]) => ({ player_id, result }));
-      await Store.addRound(state.active.sessionId, f.gameType, entries);
-      state.active.participants = Array.from(f.selected);
-      state.active.rounds += 1;
-      state.active.lastGameType = f.gameType;
-      saveActive();
-      await refresh();
-      renderBoard();
-
-      const wins = entries.filter((e) => e.result === 'win').length;
-      $('[data-done-info]').textContent =
-        `${GAME_TYPES[f.gameType].format} · ${wins} vinster · ${entries.length - wins} förluster · omgång ${state.active.rounds} idag`;
-      goStep('done');
-    } catch (err) {
-      fail(err, 'Kunde inte spara – försök igen');
-      btn.disabled = false;
-    }
-  }
-
-  function finishTraining() {
-    const rounds = state.active ? state.active.rounds : 0;
-    state.active = null;
-    saveActive();
-    location.hash = '#/';
-    if (rounds) toast(`Träning avslutad · ${rounds} ${rounds === 1 ? 'omgång' : 'omgångar'}`);
-  }
-
-  /* ---------------- Spelare ---------------- */
-
-  function renderPlayers() {
-    const sorted = state.players.slice().sort((a, b) => a.name.localeCompare(b.name, 'sv'));
-    const row = (p) => `
-      <li class="player-row" data-player="${p.id}">
-        <input class="player-row__name" value="${esc(p.name)}" maxlength="24" aria-label="Namn" data-player-name>
-        <label class="switch" title="${p.active ? 'Aktiv' : 'Inaktiv'}">
-          <input type="checkbox" ${p.active ? 'checked' : ''} data-player-active>
-          <span class="switch__track"><span class="switch__thumb"></span></span>
-          <span class="switch__label">${p.active ? 'Aktiv' : 'Inaktiv'}</span>
-        </label>
-      </li>`;
-    const active = sorted.filter((p) => p.active);
-    const inactive = sorted.filter((p) => !p.active);
-    $('[data-player-list]').innerHTML = active.map(row).join('');
-    $('[data-player-list-inactive]').innerHTML = inactive.map(row).join('');
-    $('[data-inactive-label]').hidden = inactive.length === 0;
-  }
-
-  async function renamePlayer(input) {
-    const id = input.closest('[data-player]').dataset.player;
-    const p = state.players.find((x) => x.id === id);
-    const name = input.value.trim();
-    if (!name) { input.value = p.name; return; }
-    if (name === p.name) return;
-    try {
-      await Store.updatePlayer(id, { name });
-      await refresh();
-      toast(`Namn ändrat till ${name}`);
-    } catch (err) {
-      fail(err, 'Kunde inte byta namn');
-      input.value = p.name;
-    }
-  }
-
-  async function toggleActive(input) {
-    const id = input.closest('[data-player]').dataset.player;
-    try {
-      await Store.updatePlayer(id, { active: input.checked });
-      await refresh();
-      const p = state.players.find((x) => x.id === id);
-      toast(`${p.name} är nu ${p.active ? 'aktiv' : 'inaktiv'}`);
-    } catch (err) {
-      fail(err, 'Kunde inte spara');
-    }
-    renderPlayers();
-  }
-
-  /* ---------------- Toast ---------------- */
-
-  function fail(err, msg) {
-    console.error(err);
-    if (err && err.code === 'auth') { showLogin('Du har loggats ut – logga in igen'); return; }
-    toast(navigator.onLine === false ? 'Ingen internetanslutning' : msg);
-  }
-
-  /* ---------------- Inloggning ---------------- */
-
-  function showLogin(message) {
-    document.body.classList.add('is-locked');
-    // Töm allt som visats så att inget ligger kvar bakom inloggningen
-    state.players = []; state.sessions = []; state.results = [];
-    state.tacticsAllowed = false;
-    $('[data-tactics-link]').hidden = true;
-    TacticsUI.reset();
-    $('[data-board]').innerHTML = '';
-    $('[data-player-list]').innerHTML = '';
-    $('[data-player-list-inactive]').innerHTML = '';
-    $('[data-login]').hidden = false;
-    const err = $('[data-login-error]');
-    err.textContent = message || '';
-    err.hidden = !message;
-    const form = $('[data-login-form]');
-    form.querySelector('button').disabled = false;
-    form.elements.password.value = '';
-    setPasswordVisible(false);
-    if (!form.elements.email.value) {
-      try { form.elements.email.value = localStorage.getItem(EMAIL_KEY) || ''; } catch (e) { /* ignorera */ }
-    }
-    (form.elements.email.value ? form.elements.password : form.elements.email).focus();
-  }
-
-  async function unlock() {
-    $('[data-login]').hidden = true;
-    document.body.classList.remove('is-locked');
-    $('[data-account]').hidden = !Store.requiresLogin;
-    $('[data-account-email]').textContent = Store.userEmail();
-    try {
-      await refresh();
-    } catch (err) {
-      fail(err, 'Kunde inte hämta data – kolla anslutningen');
-      if (err.code === 'auth') return;
-      $('[data-board-empty]').textContent = 'Kunde inte hämta data. Ladda om sidan för att försöka igen.';
-    }
-    // Taktiktavlan: bara för användare som finns i tactics_access (kontrolleras i databasen)
-    try { state.tacticsAllowed = await Store.canUseTactics(); } catch (err) { state.tacticsAllowed = false; }
-    $('[data-tactics-link]').hidden = !state.tacticsAllowed;
-    route();
-  }
-
-  const EMAIL_KEY = 'notviken-remembered-email';
-
-  function rememberEmail(email) {
-    try {
-      if (email) localStorage.setItem(EMAIL_KEY, email);
-      else localStorage.removeItem(EMAIL_KEY);
-    } catch (e) { /* ignorera */ }
-  }
-
-  // Be telefonens/webbläsarens lösenordshanterare spara inloggningen
-  // (Chrome/Android/Edge). Safari/iOS erbjuder det själv när formuläret skickas.
-  function offerToSavePassword(form) {
-    if (!window.PasswordCredential || !navigator.credentials) return;
-    try {
-      navigator.credentials.store(new PasswordCredential({
-        id: form.elements.email.value.trim(),
-        password: form.elements.password.value,
-        name: form.elements.email.value.trim(),
-      })).catch(() => {});
-    } catch (e) { /* stöds inte – inget att göra */ }
-  }
-
-  async function login(e) {
+function bind() {
+  $('[data-login-form]').addEventListener('submit', async (e) => {
     e.preventDefault();
     const form = e.target;
-    const email = form.elements.email.value.trim();
-    const password = form.elements.password.value;
-    const remember = form.elements.remember.checked;
-    const err = $('[data-login-error]');
-    if (!email || !password) {
-      err.textContent = 'Fyll i e-post och lösenord';
-      err.hidden = false;
-      return;
-    }
     const btn = form.querySelector('button');
     btn.disabled = true;
-    btn.textContent = 'Loggar in…';
     try {
-      await Store.signIn(email, password, remember);
-      rememberEmail(remember ? email : '');
-      offerToSavePassword(form);
-      err.hidden = true;
-      await unlock();
-    } catch (e2) {
-      console.error(e2);
-      err.textContent = e2.code === 'auth' ? e2.message
-        : navigator.onLine === false ? 'Ingen internetanslutning' : 'Kunde inte logga in – försök igen';
-      err.hidden = false;
-      form.elements.password.select();
+      await api.signIn(form.elements.email.value, form.elements.password.value);
+      $('[data-login-error]').hidden = true;
+      await start();
+    } catch (err) {
+      const el = $('[data-login-error]');
+      el.textContent = err.message;
+      el.hidden = false;
     }
     btn.disabled = false;
-    btn.textContent = 'Logga in';
-  }
+  });
 
-  function setPasswordVisible(show) {
-    const input = $('#login-password');
-    const btn = $('[data-action="toggle-password"]');
-    input.type = show ? 'text' : 'password';
-    btn.setAttribute('aria-pressed', show);
-    btn.setAttribute('aria-label', show ? 'Dölj lösenord' : 'Visa lösenord');
-  }
-
-  async function logout() {
-    await Store.signOut();
-    location.hash = '#/';
-    showLogin();
-  }
-
-  let toastTimer;
-  function toast(msg) {
-    const el = $('[data-toast]');
-    el.textContent = msg;
-    el.classList.add('is-visible');
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => el.classList.remove('is-visible'), 2400);
-  }
-
-  /* ---------------- Routing ---------------- */
-
-  function route() {
-    if (document.body.classList.contains('is-locked')) return; // inget visas utan inloggning
-    const hash = location.hash.replace(/^#\/?/, '');
-    let view = hash === 'traning' ? 'training' : hash === 'spelare' ? 'players' : hash === 'taktik' ? 'tactics' : 'board';
-    if (view === 'tactics' && !state.tacticsAllowed) { location.replace('#/'); view = 'board'; }
-    const leaving = document.body.dataset.page;
-    if (leaving === 'tactics' && view !== 'tactics') TacticsUI.close();
-    $$('[data-view]').forEach((el) => { el.hidden = el.dataset.view !== view; });
-    $$('[data-tab]').forEach((el) => el.classList.toggle('is-active', el.dataset.tab === view));
-    document.body.classList.toggle('is-flow', view === 'training');
-    document.body.classList.toggle('is-tactics', view === 'tactics');
-    document.body.dataset.page = view;
-    if (view === 'tactics') TacticsUI.open();
-    if (view === 'training') startFlow();
-    if (view === 'players') renderPlayers();
-    if (view === 'board') {
-      renderBoard();
-      requestAnimationFrame(moveIndicator);
+  document.addEventListener('click', async (e) => {
+    const t = e.target.closest('[data-action],[data-champion],[data-queue],[data-unlink],[data-more]');
+    if (!t) return;
+    if (t.dataset.champion) { state.filters.champion = t.dataset.champion; return saveFilters(); }
+    if (t.dataset.queue) { state.filters.queue = t.dataset.queue; return saveFilters(); }
+    if (t.hasAttribute('data-more')) { state.limit += PAGE; return render(); }
+    if (t.dataset.unlink) {
+      if (!confirm(`Koppla bort ${t.dataset.name}? Matcherna för kontot tas bort från din statistik.`)) return;
+      try { await api.unlinkAccount(t.dataset.unlink); await reload(); toast('Kontot är bortkopplat'); } catch (err) { fail(err); }
+      return;
     }
-    window.scrollTo({ top: 0 });
+    switch (t.dataset.action) {
+      case 'sync': sync(); break;
+      case 'cancel-sync': state.cancelSync = true; break;
+      case 'logout': await api.signOut(); showLogin(); break;
+    }
+  });
+
+  $('[data-filter-account]').addEventListener('change', (e) => { state.filters.account = e.target.value; saveFilters(); });
+
+  $('[data-link-form]').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const btn = form.querySelector('button');
+    btn.disabled = true;
+    try {
+      const { account } = await api.riot({ action: 'link', riotId: form.elements.riotId.value, platform: form.elements.platform.value });
+      form.elements.riotId.value = '';
+      await reload();
+      toast(account.already_linked ? 'Kontot var redan kopplat' : `${account.game_name}#${account.tag_line} kopplat – hämtar historiken`);
+      if (!account.already_linked) sync();
+    } catch (err) {
+      fail(err);
+    }
+    btn.disabled = false;
+  });
+}
+
+/* ---------------- Start ---------------- */
+
+async function start() {
+  try {
+    if (!(await api.isMember())) { show('denied'); return; }
+    state.profile = await api.profile();
+    show('app');
+    await reload();
+    loadChampions({ base: cfg.DDRAGON_URL || undefined }).then((c) => { state.champs = c; render(); });
+  } catch (err) {
+    fail(err);
   }
+}
 
-  /* ---------------- Events ---------------- */
-
-  function bind() {
-    $('[data-filter]').addEventListener('click', (e) => {
-      const b = e.target.closest('button[data-filter-value]');
-      if (b && b.dataset.filterValue !== state.filter) setFilter(b.dataset.filterValue);
-    });
-    window.addEventListener('resize', moveIndicator);
-
-    $('[data-pick-grid]').addEventListener('click', (e) => {
-      const b = e.target.closest('[data-pick]');
-      if (!b) return;
-      const id = b.dataset.pick;
-      const sel = state.flow.selected;
-      sel.has(id) ? sel.delete(id) : sel.add(id);
-      b.classList.toggle('is-selected', sel.has(id));
-      b.setAttribute('aria-pressed', sel.has(id));
-      if (navigator.vibrate) navigator.vibrate(8);
-      updatePickBar();
-    });
-
-    $$('[data-game-type]').forEach((b) =>
-      b.addEventListener('click', () => {
-        state.flow.gameType = b.dataset.gameType;
-        // behåll inte markeringar mellan omgångar
-        state.flow.marks = new Map();
-        goStep('3');
-      }));
-
-    $('[data-result-list]').addEventListener('click', (e) => {
-      const b = e.target.closest('[data-mark]');
-      if (b) {
-        setMark(b.closest('[data-result-row]'), b.dataset.mark);
-        if (navigator.vibrate) navigator.vibrate(8);
-        return;
-      }
-      // tryck på namnet växlar: tom → win → loss → tom
-      const row = e.target.closest('[data-result-row]');
-      if (!row) return;
-      const cur = state.flow.marks.get(row.dataset.resultRow);
-      setMark(row, cur === 'win' ? 'loss' : cur === 'loss' ? 'loss' : 'win');
-    });
-
-    document.addEventListener('click', (e) => {
-      const a = e.target.closest('[data-action]');
-      if (!a) return;
-      const action = a.dataset.action;
-      const f = state.flow;
-      switch (action) {
-        case 'toggle-all': {
-          const all = activePlayers();
-          const everyone = all.every((p) => f.selected.has(p.id));
-          f.selected = everyone ? new Set() : new Set(all.map((p) => p.id));
-          renderPick();
-          break;
-        }
-        case 'to-step-2': goStep('2'); break;
-        case 'rest-loss':
-          $$('[data-result-row]').forEach((row) => {
-            if (!f.marks.has(row.dataset.resultRow)) setMark(row, 'loss');
-          });
-          break;
-        case 'save-round': saveRound(); break;
-        case 'next-round': f.marks = new Map(); goStep('2'); break;
-        case 'change-players': goStep('1'); break;
-        case 'finish-training': finishTraining(); break;
-        case 'resume-training': location.hash = '#/traning'; break;
-        case 'flow-back':
-          if (f.step === '3') goStep('2');
-          else if (f.step === '2') goStep('1');
-          else location.hash = '#/';
-          break;
-        case 'flow-close':
-          location.hash = '#/';
-          if (state.active) toast('Träningen pågår – fortsätt från tavlan');
-          break;
-        case 'logout': logout(); break;
-        case 'toggle-password': setPasswordVisible($('#login-password').type === 'password'); break;
-        case 'reset-demo':
-          if (confirm('Återställ all demo-data?')) {
-            Store.resetDemo().then(async () => {
-              state.active = null;
-              saveActive();
-              await refresh();
-              renderPlayers();
-              toast('Demo-data återställd');
-            });
-          }
-          break;
-      }
-    });
-
-    $('[data-add-player]').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const input = e.target.elements.name;
-      const name = input.value.trim();
-      if (!name) return;
-      const btn = e.target.querySelector('button');
-      btn.disabled = true;
-      try {
-        await Store.addPlayer(name);
-        input.value = '';
-        await refresh();
-        renderPlayers();
-        toast(`${name} tillagd`);
-      } catch (err) {
-        fail(err, 'Kunde inte lägga till spelaren');
-      }
-      btn.disabled = false;
-    });
-
-    const list = $('.view[data-view="players"]');
-    list.addEventListener('change', (e) => {
-      if (e.target.matches('[data-player-active]')) toggleActive(e.target);
-      if (e.target.matches('[data-player-name]')) renamePlayer(e.target);
-    });
-    list.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && e.target.matches('[data-player-name]')) e.target.blur();
-    });
-
-    window.addEventListener('hashchange', route);
-
-    // Hämta nytt när appen öppnas igen – någon annan kan ha registrerat under tiden
-    document.addEventListener('visibilitychange', async () => {
-      if (document.visibilityState !== 'visible' || Store.mode === 'demo') return;
-      if (document.body.classList.contains('is-locked')) return;
-      try {
-        await refresh();
-        const page = document.body.dataset.page;
-        if (page === 'board') renderBoard();
-        if (page === 'players' && !document.activeElement.matches('input')) renderPlayers();
-      } catch (err) {
-        if (err.code === 'auth') fail(err); else console.error(err);
-      }
-    });
-
-    $('[data-login-form]').addEventListener('submit', login);
-  }
-
-  /* ---------------- Start ---------------- */
-
-  function loadHeroPhoto() {
-    // Valfritt foto bakom toppen: lägg en bild som assets/hero.jpg
-    const img = new Image();
-    img.onload = () => $('[data-hero-bg]').style.setProperty('--hero-photo', `url("${img.src}")`);
-    img.src = 'assets/hero.jpg';
-  }
-
-  async function init() {
-    loadHeroPhoto();
-    $('[data-team-name]').textContent = TEAM.name;
-    $('[data-team-sub]').textContent = TEAM.sub;
-    $('[data-action="reset-demo"]').hidden = Store.mode !== 'demo';
-    TacticsUI.init({
-      store: Store,
-      onError: fail,
-      getSquad: () => state.players.filter((p) => p.active).map((p) => p.name).sort((a, b) => a.localeCompare(b, 'sv')),
-    });
-    bind();
-    if (Store.requiresLogin && !Store.isLoggedIn()) showLogin();
-    else await unlock();
-  }
-
-  init();
-})();
+try {
+  api = createApi({ url: cfg.SUPABASE_URL, key: cfg.SUPABASE_KEY || cfg.SUPABASE_ANON_KEY });
+} catch (err) {
+  document.body.innerHTML = `<p style="padding:24px">${err.message}</p>`;
+  throw err;
+}
+bind();
+if (api.isLoggedIn()) start(); else showLogin();

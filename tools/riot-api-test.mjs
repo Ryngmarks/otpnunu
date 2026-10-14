@@ -12,8 +12,8 @@
  * Inget sparas i Supabase. Rådata skrivs bara till disk om --save <mapp> anges.
  *
  * Körning:
- *   RIOT_API_KEY=RGAPI-… node nunu/tools/riot-api-test.mjs
- *   RIOT_API_KEY=RGAPI-… node nunu/tools/riot-api-test.mjs --save ./riot-raw
+ *   RIOT_API_KEY=RGAPI-… node tools/riot-api-test.mjs
+ *   RIOT_API_KEY=RGAPI-… node tools/riot-api-test.mjs --save ./riot-raw
  *
  * Miljövariabler:
  *   RIOT_API_KEY   (krävs)   Riot-nyckeln. Skrivs aldrig ut.
