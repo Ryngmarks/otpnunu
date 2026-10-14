@@ -130,7 +130,19 @@ export function careerHtml(c) {
       <td>${dash(s.kda)}</td>
     </tr>`;
   const since = c.recent.since ? `Sedan ${esc(new Date(c.recent.since).toLocaleDateString('sv-SE', { month: 'short', year: 'numeric' }))}` : 'Synkat från Riot';
+  const cols = [...c.seasons.map((s) => ({ ...s, label: s.season })), ...(c.recent.games ? [{ ...c.recent, label: since.replace('Sedan ', '') }] : [])];
+  // Höjd: 30 % vinst = tom stapel, 70 % = full; 50 % ligger på mittlinjen
+  const height = (wr) => Math.max(2, Math.min(100, ((wr - 30) / 40) * 100));
   return `
+    <div class="seasonbars" role="img" aria-label="Vinst per säsong: ${esc(cols.map((s) => `${s.label} ${s.winrate} %`).join(', '))}">
+      <i class="seasonbars__mid" aria-hidden="true"><span>50 %</span></i>
+      ${cols.map((s) => `
+        <div class="seasonbars__col" title="${esc(`${s.label}: ${s.winrate} % på ${s.games} matcher`)}">
+          <span class="seasonbars__wr">${s.winrate}%</span>
+          <i class="${s.winrate >= 50 ? 'is-good' : 'is-bad'}" style="height:${height(s.winrate)}%"></i>
+        </div>`).join('')}
+    </div>
+    <div class="seasonbars__labels">${cols.map((s) => `<span>${esc(s.label)}<small>${num(s.games)}</small></span>`).join('')}</div>
     <table class="career">
       <thead><tr><th scope="col">Säsong</th><th scope="col">Matcher</th><th scope="col">V–F</th><th scope="col">Vinst</th><th scope="col">KDA</th></tr></thead>
       <tbody>
@@ -173,10 +185,12 @@ export function damageHtml(rep, champs) {
           <small>${w.label}</small>
         </div>`).join('')}
     </div>
-    <p class="chips chips--static">
-      ${Object.entries(d.places).map(([k, n]) => `<span>${placeLabels[k]} <b>${n}</b></span>`).join('')}
-      <span>ensam 1 mot 1 <b>${d.solo}</b></span>
-    </p>
+    <h3 class="sub">Var du dör</h3>
+    <ul class="placebars">${[...Object.entries(d.places).map(([k, n]) => [placeLabels[k], n]), ['ensam 1 mot 1', d.solo]].map(([label, n]) => {
+      const share = d.total ? Math.round((n / d.total) * 100) : 0;
+      return `<li><span>${label}</span><span class="placebars__track"><i style="width:${share}%"></i></span><b>${share}%</b></li>`;
+    }).join('')}</ul>
+    <p class="legend"><span>Andel av alla ${d.total} dödsfall · en död kan ha flera platser (t.ex. camp och torn)</span></p>
 
     ${d.killers.length ? `
     <h3 class="sub">Med när du dör</h3>
@@ -207,28 +221,39 @@ export function gankHtml(rep) {
       ${tile(num(rep.takedowns), `Takedowns i ganks · ${rep.vsJungler} mot jungler`)}
     </div>
 
-    <table class="career ganks">
-      <thead><tr><th scope="col">Lane</th><th scope="col">Ganks</th><th scope="col">Lyckade</th><th scope="col" title="Andel matcher där första ganken var här">Först</th><th scope="col" title="Vinst när första ganken var här">Vinst</th></tr></thead>
-      <tbody>${rep.lanes.map((l) => `
-        <tr><th scope="row">${LANE_NAMES[l.lane]}</th>
-          <td>${l.ganks}</td>
-          <td>${l.success == null ? '–' : `${l.success}%`}</td>
-          <td>${l.firstShare == null ? '–' : `${l.firstShare}%`}</td>
-          <td>${wrCell(l.firstWin)}</td></tr>`).join('')}
-      </tbody>
-    </table>
+    <h3 class="sub">Per lane</h3>
+    <ul class="lanebars">${rep.lanes.map((l) => {
+      const ok = l.ganks ? Math.round(((l.ganks - l.trades) / l.ganks) * 100) : 0;
+      const max = Math.max(1, ...rep.lanes.map((x) => x.ganks));
+      return `
+      <li>
+        <span class="lanebars__name">${LANE_NAMES[l.lane]}</span>
+        <span class="lanebars__track" style="width:${Math.max(4, (l.ganks / max) * 100)}%" title="${l.ganks} ganks: ${l.ganks - l.trades} lyckade, ${l.trades} byten">
+          <i class="is-good" style="width:${ok}%"></i><i class="is-bad" style="width:${100 - ok}%"></i>
+        </span>
+        <span class="lanebars__value">${l.ganks} <small>· ${l.success == null ? '–' : `${l.success}%`} lyckade</small></span>
+        <span class="lanebars__first">Första ganken här ${l.firstShare == null ? '–' : `${l.firstShare}%`} av matcherna · vinst då ${wrCell(l.firstWin)}</span>
+      </li>`;
+    }).join('')}</ul>
+    <p class="legend"><span><i class="sw is-win"></i>Lyckad</span><span><i class="sw is-loss"></i>Byte (du dog)</span><span>Längd = antal ganks</span></p>
+
+    <h3 class="sub">När första ganken sker</h3>
+    ${(() => {
+      const max = Math.max(1, ...rep.firstBins.map((b) => b.count));
+      return `<div class="histo" role="img" aria-label="Första ganken per minut: ${esc(rep.firstBins.map((b) => `${b.label} min ${b.count}`).join(', '))}">${rep.firstBins.map((b) => `
+        <div class="histo__col"><span>${b.count}</span><i class="${b.hasMedian ? 'is-median' : ''}" style="height:${(b.count / max) * 100}%"></i><small>${b.label}</small></div>`).join('')}</div>
+        <p class="legend"><span>Minuter in i matchen · ljusare stapel = där medianen (${clock(rep.first.median)}) ligger</span></p>`;
+    })()}
 
     <h3 class="sub">Första ganken och vinst</h3>
-    <table class="career ganks">
-      <tbody>
-        <tr><th scope="row">Lyckad (överlevde)</th><td>${wrCell(rep.first.lyckad)}</td></tr>
-        <tr><th scope="row">Byte (dog själv)</th><td>${wrCell(rep.first.byte)}</td></tr>
-        <tr><th scope="row">Ingen gank före 15:00</th><td>${wrCell(rep.first.ingen)}</td></tr>
-      </tbody>
-    </table>
+    ${barRows([
+      { label: 'Lyckad (överlevde)', ...rep.first.lyckad },
+      { label: 'Byte (dog själv)', ...rep.first.byte },
+      { label: 'Ingen gank före 15:00', ...rep.first.ingen },
+    ])}
 
     <h3 class="sub">Antal ganks före 15:00 och vinst</h3>
-    <p class="chips chips--static">${rep.byCount.map((c) => `<span>${c.label} ${c.label === '1' ? 'gank' : 'ganks'} <b>${c.games ? `${c.winrate}%` : '–'}</b> <small>(${c.games})</small></span>`).join('')}</p>
+    ${barRows(rep.byCount.map((c) => ({ ...c, label: `${c.label} ${c.label === '1' ? 'gank' : 'ganks'}` })))}
     <p class="card__hint card__hint--after">Gank = kill eller assist i en lane före 15:00. Kills i lane utan dig och strider i jungle/river räknas inte.
       ${rep.laneDeaths ? `${rep.laneDeaths} gånger dog du i en lane utan takedown – kanske en misslyckad gank, men det går inte att veta säkert.` : ''}</p>`;
 }
@@ -237,23 +262,31 @@ export function gankHtml(rep) {
 
 const signed = (n) => (n == null ? '–' : `${n > 0 ? '+' : n < 0 ? '−' : '±'}${num(Math.abs(n))}`);
 const diffCell = (n) => `<span class="${n == null ? '' : n >= 0 ? 'pos' : 'neg'}">${signed(n)}</span>`;
+/** Stapel från en mittlinje (t.ex. 50 % vinst): åt höger = bättre, åt vänster = sämre. Skillnaden förstärks ×2. */
+const divBar = (value, center = 50) => {
+  const d = value - center;
+  const w = Math.min(50, Math.abs(d) * 2);
+  return `<span class="wrbars__track"><i class="${d >= 0 ? 'is-good' : 'is-bad'}" style="left:${d >= 0 ? 50 : 50 - w}%;width:${w}%"></i></span>`;
+};
 const barRows = (groups) => {
   const shown = groups.filter((g) => g.games);
   if (!shown.length) return '<p class="empty">För få matcher.</p>';
   return `<ul class="wrbars">${shown.map((g) => `
     <li>
       <span class="wrbars__label">${esc(g.label)}</span>
-      <span class="wrbars__track"><i class="${g.winrate >= 50 ? 'is-good' : 'is-bad'}" style="width:${g.winrate}%"></i></span>
+      ${divBar(g.winrate)}
       <span class="wrbars__value">${g.winrate}% <small>(${g.games})</small></span>
     </li>`).join('')}</ul>`;
 };
-const champList = (list, champs, empty = 'För få matcher.') => (list.length
-  ? `<ul class="opponents">${list.map((c) => `
+const champList = (list, champs, base = 50, empty = 'För få matcher.') => (list.length
+  ? `<ul class="champbars">${list.map((c) => `
       <li>
         ${champIcon(champs, c.championId)}
-        <span class="opponents__name">${esc(champs.name(c.championId))}</span>
-        <span class="opponents__games">${c.games} st</span>
-        <span class="wr ${c.winrate >= 50 ? 'wr--good' : 'wr--bad'}">${c.winrate}%</span>
+        <span class="champbars__main">
+          <span><span class="opponents__name">${esc(champs.name(c.championId))}</span> <small class="muted">· ${c.games} st</small></span>
+          ${divBar(c.winrate, base)}
+        </span>
+        <span class="wr ${c.winrate >= base ? 'wr--good' : 'wr--bad'}">${c.winrate}%</span>
       </li>`).join('')}</ul>`
   : `<p class="empty">${empty}</p>`);
 
@@ -289,12 +322,12 @@ export function earlyHtml(rep) {
 export function synergyHtml(rep, champs) {
   if (!rep) return '';
   return `
-    <p class="card__hint">Champions med minst ${rep.minGames} matcher · din vinst totalt ${rep.baseline}%</p>
+    <p class="card__hint">Champions med minst ${rep.minGames} matcher · staplarna utgår från din vinst totalt (${rep.baseline} %)</p>
     <div class="split">
-      <div><h3 class="sub">Bäst med</h3>${champList(rep.bestAllies, champs)}</div>
-      <div><h3 class="sub">Sämst med</h3>${champList(rep.worstAllies, champs)}</div>
-      <div><h3 class="sub">Lättast mot</h3>${champList(rep.easiestEnemies, champs)}</div>
-      <div><h3 class="sub">Svårast mot</h3>${champList(rep.hardestEnemies, champs)}</div>
+      <div><h3 class="sub">Bäst med</h3>${champList(rep.bestAllies, champs, rep.baseline)}</div>
+      <div><h3 class="sub">Sämst med</h3>${champList(rep.worstAllies, champs, rep.baseline)}</div>
+      <div><h3 class="sub">Lättast mot</h3>${champList(rep.easiestEnemies, champs, rep.baseline)}</div>
+      <div><h3 class="sub">Svårast mot</h3>${champList(rep.hardestEnemies, champs, rep.baseline)}</div>
     </div>`;
 }
 

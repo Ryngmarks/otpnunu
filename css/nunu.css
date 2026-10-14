@@ -442,3 +442,59 @@ body.is-locked .bg {
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
 .sw { display: inline-block; width: 14px; height: 4px; border-radius: 2px; }
 .sw.is-win { background: var(--win); } .sw.is-loss { background: var(--loss); }
+
+/* ---------------- Diagram i flikarna ---------------- */
+/* Divergerande stapel från mittlinjen (50 % eller din vinst totalt) */
+.wrbars__track i { position: absolute; top: 0; bottom: 0; }
+.wrbars__track i.is-good { background: linear-gradient(90deg, rgba(94, 200, 245, .55), var(--win)); }
+.wrbars__track i.is-bad { background: linear-gradient(270deg, rgba(242, 136, 75, .55), var(--loss)); }
+
+/* Synergier: champion + stapel mot din vinst totalt */
+.champbars { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.champbars li { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+.champbars .champ { width: 34px; height: 34px; }
+.champbars__main { display: grid; gap: 5px; min-width: 0; font-size: 14px; }
+.champbars__main .wrbars__track { height: 7px; }
+
+/* Karriär: vinst per säsong */
+.seasonbars { position: relative; display: flex; align-items: flex-end; gap: 8px; height: 190px; padding-top: 18px; border-bottom: 1px solid rgba(159, 176, 207, .22); }
+.seasonbars__mid { position: absolute; left: 0; right: 0; bottom: calc((190px - 18px) * .5); border-top: 1px dashed rgba(238, 244, 255, .45); }
+.seasonbars__mid span { position: absolute; right: 0; top: -16px; font-size: 11px; font-style: normal; color: var(--muted); }
+.seasonbars__col { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 4px; min-width: 0; }
+.seasonbars__col i { display: block; width: 72%; max-width: 54px; border-radius: 4px 4px 0 0; }
+.seasonbars__col i.is-good { background: linear-gradient(180deg, var(--win), rgba(94, 200, 245, .45)); }
+.seasonbars__col i.is-bad { background: linear-gradient(180deg, var(--loss), rgba(242, 136, 75, .45)); }
+.seasonbars__wr { font-size: 12px; font-weight: 600; }
+.seasonbars__labels { display: flex; gap: 8px; margin: 6px 0 16px; }
+.seasonbars__labels span { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; font-size: 11.5px; color: var(--muted); text-align: center; overflow-wrap: anywhere; }
+.seasonbars__labels small { font-size: 10.5px; opacity: .8; }
+
+/* Ganks per lane: längd = antal, färg = lyckade/byten */
+.lanebars { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.lanebars li { display: grid; grid-template-columns: 3rem minmax(0, 1fr) auto; align-items: center; gap: 4px 10px; }
+.lanebars__name { font: 700 16px var(--font-display); }
+.lanebars__track { display: flex; gap: 2px; height: 14px; }
+.lanebars__track i { display: block; height: 100%; }
+.lanebars__track i.is-good { background: var(--win); border-radius: 4px 0 0 4px; }
+.lanebars__track i.is-bad { background: var(--loss); border-radius: 0 4px 4px 0; }
+.lanebars__value { font-weight: 600; white-space: nowrap; }
+.lanebars__value small { color: var(--muted); font-weight: 400; }
+.lanebars__first { grid-column: 2 / -1; font-size: 12.5px; color: var(--muted); }
+.lanebars__first .wr { font-size: 13px; }
+
+/* Histogram: första ganken */
+.histo { display: flex; align-items: flex-end; gap: 6px; height: 120px; }
+.histo__col { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; height: 100%; min-width: 0; }
+.histo__col span { font-size: 11.5px; color: var(--muted); }
+.histo__col i { display: block; width: 100%; min-height: 2px; border-radius: 4px 4px 0 0; background: rgba(94, 200, 245, .5); }
+.histo__col i.is-median { background: var(--ice); }
+.histo__col small { font-size: 11px; color: var(--muted); }
+
+/* Var du dör */
+.placebars { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.placebars li { display: grid; grid-template-columns: 8.5rem minmax(0, 1fr) 3rem; align-items: center; gap: 10px; font-size: 13.5px; }
+.placebars li > span:first-child { color: var(--muted); }
+.placebars li b { text-align: right; }
+.placebars__track { height: 12px; border-radius: 4px; background: rgba(143, 211, 255, .06); overflow: hidden; }
+.placebars__track i { display: block; height: 100%; border-radius: 4px; background: var(--loss); }
+@media (max-width: 420px) { .placebars li { grid-template-columns: 7rem minmax(0, 1fr) 2.6rem; } }

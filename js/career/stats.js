@@ -265,10 +265,24 @@ export function gankReport(rows) {
     return { label, ...winrate(list) };
   });
 
+  // När första ganken sker (minuter), för stapeldiagrammet
+  const BINS = [[0, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 8], [8, 10], [10, 15]];
+  const firstBins = BINS.map(([a, b]) => ({
+    label: `${a}–${b}`,
+    count: times.filter((t) => t >= a * 60000 && t < b * 60000).length,
+    hasMedian: false,
+  }));
+  const median = times.length ? times[Math.floor((times.length - 1) / 2)] : null;
+  if (median != null) {
+    const i = BINS.findIndex(([a, b]) => median >= a * 60000 && median < b * 60000);
+    if (i >= 0) firstBins[i].hasMedian = true;
+  }
+
   return {
     games: games.length,
     ganks: ganks.length,
     perGame: round(ganks.length / games.length),
+    firstBins,
     success: pct(ganks.filter((g) => !g.died).length, ganks.length),
     trades: ganks.filter((g) => g.died).length,
     takedowns: ganks.reduce((s, g) => s + g.takedowns, 0),
