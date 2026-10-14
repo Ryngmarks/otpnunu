@@ -3,8 +3,8 @@
  */
 import { createApi, ApiError } from './core/api.js';
 import { loadChampions } from './core/ddragon.js';
-import { NUNU, QUEUE_FILTERS, filterMatches, summarize, recentForm, byAccount, opponents, masterySummary, careerSummary, damageReport, gankReport } from './career/stats.js';
-import { esc, heroHtml, tilesHtml, formHtml, accountsHtml, opponentsHtml, matchesHtml, careerHtml, damageHtml, gankHtml } from './career/view.js';
+import { NUNU, QUEUE_FILTERS, filterMatches, summarize, recentForm, byAccount, opponents, masterySummary, careerSummary, damageReport, gankReport, earlyReport, synergyReport, matchupReport, impactReport } from './career/stats.js';
+import { esc, heroHtml, tilesHtml, formHtml, accountsHtml, opponentsHtml, matchesHtml, careerHtml, damageHtml, gankHtml, earlyHtml, synergyHtml, matchupHtml, impactHtml } from './career/view.js';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -19,7 +19,7 @@ const state = {
   mastery: [],
   history: [],
   deaths: [],
-  champs: { name: (id) => `#${id}`, icon: () => null },
+  champs: { name: (id) => `#${id}`, icon: () => null, tags: () => [] },
   filters: { champion: 'nunu', queue: 'rift', account: '' },
   limit: PAGE,
   syncing: false,
@@ -92,6 +92,15 @@ function render() {
   const career = careerHtml(careerSummary(state.history, filterMatches(state.matches, { champion }), { champion }));
   $('[data-career]').innerHTML = career;
   $('[data-career-card]').hidden = !career;
+  // Early game-korten: tomma kort döljs
+  const card = (name, html) => {
+    $(`[data-${name}]`).innerHTML = html;
+    $(`[data-${name}-card]`).hidden = !html;
+  };
+  card('early', earlyHtml(earlyReport(rows)));
+  card('impact', impactHtml(impactReport(rows)));
+  card('matchup', matchupHtml(matchupReport(rows, { tags: state.champs.tags }), state.champs));
+  card('synergy', synergyHtml(synergyReport(rows), state.champs));
   const ganks = gankHtml(gankReport(rows));
   $('[data-ganks]').innerHTML = ganks;
   $('[data-gank-card]').hidden = !ganks;

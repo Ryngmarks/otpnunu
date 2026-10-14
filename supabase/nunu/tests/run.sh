@@ -34,3 +34,7 @@ $PSQL -d "$DB" -f 004_rekey_test.sql 2>&1 | sed -n 's/^psql:[^ ]* \(NOTICE\|ERRO
 PGOPTIONS='-c client_min_messages=warning' $PSQL -d "$DB" -f ../005_ganks.sql
 PGOPTIONS='-c client_min_messages=warning' $PSQL -d "$DB" -f ../005_ganks.sql
 $PSQL -d "$DB" -Atc "select 'GANKTESTER GODKÄNDA' from information_schema.columns where table_schema = 'nunu' and table_name = 'account_match' and column_name = 'ganks' and data_type = 'jsonb'"
+# Early game: kolumnerna finns och går att köra om
+PGOPTIONS='-c client_min_messages=warning' $PSQL -d "$DB" -f ../006_early.sql
+PGOPTIONS='-c client_min_messages=warning' $PSQL -d "$DB" -f ../006_early.sql
+$PSQL -d "$DB" -Atc "select 'EARLY-TESTER GODKÄNDA' where (select count(*) from information_schema.columns where table_schema = 'nunu' and table_name = 'account_match' and column_name in ('early', 'allies', 'enemies', 'enemy_ap_share')) = 4"

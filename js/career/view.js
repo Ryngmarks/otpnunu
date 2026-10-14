@@ -232,3 +232,100 @@ export function gankHtml(rep) {
     <p class="card__hint card__hint--after">Gank = kill eller assist i en lane före 15:00. Kills i lane utan dig och strider i jungle/river räknas inte.
       ${rep.laneDeaths ? `${rep.laneDeaths} gånger dog du i en lane utan takedown – kanske en misslyckad gank, men det går inte att veta säkert.` : ''}</p>`;
 }
+
+/* ---------------- Early game, synergier, matchups, tidigt → vinst ---------------- */
+
+const signed = (n) => (n == null ? '–' : `${n > 0 ? '+' : n < 0 ? '−' : '±'}${num(Math.abs(n))}`);
+const diffCell = (n) => `<span class="${n == null ? '' : n >= 0 ? 'pos' : 'neg'}">${signed(n)}</span>`;
+const barRows = (groups) => {
+  const shown = groups.filter((g) => g.games);
+  if (!shown.length) return '<p class="empty">För få matcher.</p>';
+  return `<ul class="wrbars">${shown.map((g) => `
+    <li>
+      <span class="wrbars__label">${esc(g.label)}</span>
+      <span class="wrbars__track"><i class="${g.winrate >= 50 ? 'is-good' : 'is-bad'}" style="width:${g.winrate}%"></i></span>
+      <span class="wrbars__value">${g.winrate}% <small>(${g.games})</small></span>
+    </li>`).join('')}</ul>`;
+};
+const champList = (list, champs, empty = 'För få matcher.') => (list.length
+  ? `<ul class="opponents">${list.map((c) => `
+      <li>
+        ${champIcon(champs, c.championId)}
+        <span class="opponents__name">${esc(champs.name(c.championId))}</span>
+        <span class="opponents__games">${c.games} st</span>
+        <span class="wr ${c.winrate >= 50 ? 'wr--good' : 'wr--bad'}">${c.winrate}%</span>
+      </li>`).join('')}</ul>`
+  : `<p class="empty">${empty}</p>`);
+
+/** Modul 2: early game vid 5/10/15 min. */
+export function earlyHtml(rep) {
+  if (!rep) return '';
+  const col = (m, f) => `<td>${f(m)}</td>`;
+  const row = (label, f) => `<tr><th scope="row">${label}</th>${rep.minutes.map((m) => col(m, f)).join('')}</tr>`;
+  return `
+    <table class="career early">
+      <thead><tr><th scope="col">Snitt</th>${rep.minutes.map((m) => `<th scope="col">${m.minute} min</th>`).join('')}</tr></thead>
+      <tbody>
+        ${row('Guld', (m) => num(m.gold))}
+        ${row('XP · nivå', (m) => `${num(m.xp)} <small class="muted">· ${dash(m.level)}</small>`)}
+        ${row('CS', (m) => num(m.cs))}
+        ${row('K / D / A', (m) => (m.k == null ? '–' : `${dash(m.k)} / ${dash(m.d)} / ${dash(m.a)}`))}
+      </tbody>
+    </table>
+    <h3 class="sub">Mot motståndarens jungler</h3>
+    <table class="career early">
+      <thead><tr><th scope="col">Skillnad</th>${rep.minutes.map((m) => `<th scope="col">${m.minute} min</th>`).join('')}</tr></thead>
+      <tbody>
+        ${row('Guld', (m) => diffCell(m.goldDiff))}
+        ${row('XP', (m) => diffCell(m.xpDiff))}
+        ${row('CS', (m) => diffCell(m.csDiff))}
+        ${row('Guld i vinster', (m) => diffCell(m.goldDiffWin))}
+        ${row('Guld i förluster', (m) => diffCell(m.goldDiffLoss))}
+      </tbody>
+    </table>`;
+}
+
+/** Modul 3: synergier. */
+export function synergyHtml(rep, champs) {
+  if (!rep) return '';
+  return `
+    <p class="card__hint">Champions med minst ${rep.minGames} matcher · din vinst totalt ${rep.baseline}%</p>
+    <div class="split">
+      <div><h3 class="sub">Bäst med</h3>${champList(rep.bestAllies, champs)}</div>
+      <div><h3 class="sub">Sämst med</h3>${champList(rep.worstAllies, champs)}</div>
+      <div><h3 class="sub">Lättast mot</h3>${champList(rep.easiestEnemies, champs)}</div>
+      <div><h3 class="sub">Svårast mot</h3>${champList(rep.hardestEnemies, champs)}</div>
+    </div>`;
+}
+
+/** Modul 4: matchups mot jungler och lagkompositioner. */
+export function matchupHtml(rep, champs) {
+  if (!rep) return '';
+  return `
+    ${rep.vsJungler.length ? `
+    <table class="career matchups">
+      <thead><tr><th scope="col">Jungler</th><th scope="col">Matcher</th><th scope="col">Vinst</th><th scope="col">Guld 10 min</th><th scope="col">XP 10 min</th></tr></thead>
+      <tbody>${rep.vsJungler.map((j) => `
+        <tr><th scope="row"><span class="champ-cell">${champIcon(champs, j.championId)}${esc(champs.name(j.championId))}</span></th>
+          <td>${j.games}</td>
+          <td><span class="wr ${j.winrate >= 50 ? 'wr--good' : 'wr--bad'}">${j.winrate}%</span></td>
+          <td>${diffCell(j.goldDiff10)}</td><td>${diffCell(j.xpDiff10)}</td></tr>`).join('')}
+      </tbody>
+    </table>` : '<p class="empty">För få matcher mot samma jungler.</p>'}
+    <h3 class="sub">Motståndarlagets skada</h3>
+    ${barRows(rep.profiles)}
+    ${rep.comps.length ? `<h3 class="sub">Motståndarlagets typer <small class="muted">(ungefärligt, Riots klassning)</small></h3>${barRows(rep.comps)}` : ''}`;
+}
+
+/** Modul 5: tidig prestation och vinst. */
+export function impactHtml(rep) {
+  if (!rep) return '';
+  return `
+    <h3 class="sub">Guld mot motståndarens jungler vid 10 min</h3>
+    ${barRows(rep.goldDiff10)}
+    <h3 class="sub">Dina dödsfall före 10 min</h3>
+    ${barRows(rep.deaths10)}
+    <h3 class="sub">First blood</h3>
+    ${barRows(rep.firstBlood)}
+    <p class="card__hint card__hint--after">Visar samband, inte orsak – en tidig ledning kan också bero på draften.</p>`;
+}

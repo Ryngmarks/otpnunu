@@ -189,3 +189,50 @@ test('gankReport: ganks per lane, första ganken och vinst', async () => {
   assert.match(html, /Ganks per match/);
   assert.match(html, /dog du i en lane utan takedown/);
 });
+
+test('modul 2–5: early game, synergier, matchups och tidigt → vinst', async () => {
+  const s = await import('../js/career/stats.js');
+  const v = await import('../js/career/view.js');
+  const early = (gold, oppGold, d10, fb) => ({
+    me: { 5: { gold: gold / 2, xp: 1000, level: 4, cs: 30, k: 0, d: 0, a: 0 }, 10: { gold, xp: 4000, level: 7, cs: 60, k: 1, d: d10, a: 1 } },
+    opp: { 5: { gold: oppGold / 2, xp: 900, level: 4, cs: 28 }, 10: { gold: oppGold, xp: 3800, level: 7, cs: 55 } },
+    firstBlood: fb,
+  });
+  const rows = [
+    { win: true, early: early(4500, 3000, 0, 'kill'), allies: [22, 103], enemies: [64, 51], enemy_ap_share: 20, opponent_champion_id: 64 },
+    { win: true, early: early(4000, 3900, 1, 'assist'), allies: [22, 86], enemies: [64, 7], enemy_ap_share: 60, opponent_champion_id: 64 },
+    { win: false, early: early(3000, 4200, 2, 'died'), allies: [86, 103], enemies: [121, 7], enemy_ap_share: 45, opponent_champion_id: 121 },
+    { win: false, early: null, allies: [22], enemies: [64], enemy_ap_share: null, opponent_champion_id: 64 },
+  ];
+
+  const e = s.earlyReport(rows);
+  assert.equal(e.games, 3);
+  const m10 = e.minutes.find((m) => m.minute === 10);
+  assert.deepEqual([m10.gold, m10.goldDiff, m10.xpDiff, m10.csDiff], [3833, 133, 200, 5]);
+  assert.deepEqual([m10.goldDiffWin, m10.goldDiffLoss], [800, -1200]);
+  assert.equal(e.minutes.find((m) => m.minute === 15).games, 0);
+
+  const syn = s.synergyReport(rows, { minGames: 2 });
+  assert.equal(syn.baseline, 50);
+  assert.deepEqual(syn.bestAllies[0], { championId: 22, games: 3, wins: 2, winrate: 67 });
+  assert.deepEqual(syn.hardestEnemies.map((c) => c.championId), [7, 64]);
+
+  const tags = (id) => ({ 64: ['Fighter'], 51: ['Marksman'], 7: ['Assassin', 'Mage'], 121: ['Assassin'] }[id] || []);
+  const mu = s.matchupReport(rows, { tags, minGames: 1 });
+  assert.deepEqual([mu.vsJungler[0].championId, mu.vsJungler[0].games, mu.vsJungler[0].winrate, mu.vsJungler[0].goldDiff10], [64, 3, 67, 800]);
+  assert.deepEqual(mu.profiles.map((p) => p.games), [1, 1, 1]);
+  assert.deepEqual(mu.comps.find((c) => c.label === '2+ Assassins'), { label: '2+ Assassins', games: 1, wins: 0, winrate: 0 });
+
+  const imp = s.impactReport(rows);
+  assert.deepEqual(imp.goldDiff10.map((g) => g.games), [1, 0, 1, 0, 1]);
+  assert.deepEqual(imp.deaths10.map((g) => g.games), [1, 1, 1]);
+  assert.deepEqual(imp.firstBlood.map((g) => g.games), [1, 1, 1, 0]);
+
+  const champs = { name: (id) => `<${id}>`, icon: () => null, tags };
+  for (const html of [v.earlyHtml(e), v.synergyHtml(syn, champs), v.matchupHtml(mu, champs), v.impactHtml(imp)]) {
+    assert.ok(html.length > 50);
+    assert.doesNotMatch(html, /undefined|NaN|<64>/, 'inga trasiga värden, namn escapas');
+  }
+  assert.equal(s.earlyReport([{ win: true, early: null }]), null);
+  assert.equal(v.earlyHtml(null), '');
+});

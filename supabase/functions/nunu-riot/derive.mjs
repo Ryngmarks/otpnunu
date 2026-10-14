@@ -7,11 +7,13 @@
  *   1: grundstatistik
  *   2: skada (typ, tagen, andel av laget, motståndarens) och tidslinjen (skada vid 10/14/20 min, dödsfall)
  *   3: ganks före 15:00 (gank.mjs)
+ *   4: early game 5/10/15 min och first blood (early.mjs), lagen och motståndarnas AP-andel
  */
 import { deriveTimeline } from './damage.mjs';
 import { findGanks } from './gank.mjs';
+import { deriveEarly, deriveTeams } from './early.mjs';
 
-export const DERIVED_VERSION = 3;
+export const DERIVED_VERSION = 4;
 export const NUNU_CHAMPION_ID = 20;
 
 /** Köer på Summoner's Rift – bara för dem hämtas tidslinjen. */
@@ -77,6 +79,8 @@ export function deriveAccountMatch(match, puuid, timeline = null, aliases = []) 
     damage_at14: tl ? tl.at14 : null,
     damage_at20: tl ? tl.at20 : null,
     ganks: tl ? findGanks(match, timeline, ids) : null,  // null = ingen tidslinje eller inte jungle
+    early: tl ? deriveEarly(match, timeline, ids) : null,
+    ...deriveTeams(match, ids),                           // allies, enemies, enemy_ap_share
     derived_version: DERIVED_VERSION,
   };
 }

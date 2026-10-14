@@ -284,3 +284,141 @@ export function gankReport(rows) {
     byCount,
   };
 }
+
+/* ---------------- Early game, synergier, matchups (docs/nunu-early-game.md, modul 2–5) ---------------- */
+
+export const EARLY_MINUTES = [5, 10, 15];
+const mean = (xs) => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : null);
+const winrateOf = (list) => ({ games: list.length, wins: list.filter((r) => r.win).length, winrate: pct(list.filter((r) => r.win).length, list.length) });
+const diffAt = (r, minute, key) => {
+  const me = r.early?.me?.[minute];
+  const opp = r.early?.opp?.[minute];
+  return me && opp ? me[key] - opp[key] : null;
+};
+
+/** Modul 2: snitt vid 5/10/15 min, och diff mot motståndaren på din position (vinster och förluster för sig). */
+export function earlyReport(rows) {
+  const games = rows.filter((r) => r.early && r.early.me);
+  if (!games.length) return null;
+  const minutes = EARLY_MINUTES.map((minute) => {
+    const at = games.filter((r) => r.early.me[minute]);
+    const avg = (key) => (at.length ? round(mean(at.map((r) => r.early.me[minute][key])), key === 'k' || key === 'd' || key === 'a' || key === 'level' ? 1 : 0) : null);
+    const diff = (key, list = at) => {
+      const xs = list.map((r) => diffAt(r, minute, key)).filter((x) => x != null);
+      return xs.length ? round(mean(xs), 0) : null;
+    };
+    return {
+      minute,
+      games: at.length,
+      gold: avg('gold'), xp: avg('xp'), cs: avg('cs'), level: avg('level'), k: avg('k'), d: avg('d'), a: avg('a'),
+      goldDiff: diff('gold'), xpDiff: diff('xp'), csDiff: diff('cs'),
+      goldDiffWin: diff('gold', at.filter((r) => r.win)),
+      goldDiffLoss: diff('gold', at.filter((r) => !r.win)),
+    };
+  });
+  return { games: games.length, minutes };
+}
+
+/** Modul 3: lagkamrater och motståndare (champions) med vinst. Bara champions med minst minGames matcher. */
+export function synergyReport(rows, { minGames = 5, limit = 5 } = {}) {
+  const games = rows.filter((r) => Array.isArray(r.allies) && Array.isArray(r.enemies));
+  if (!games.length) return null;
+  const tally = (key) => {
+    const map = new Map();
+    for (const r of games) {
+      for (const id of r[key]) {
+        const t = map.get(id) || { championId: id, games: 0, wins: 0 };
+        t.games++;
+        if (r.win) t.wins++;
+        map.set(id, t);
+      }
+    }
+    return [...map.values()].filter((t) => t.games >= minGames).map((t) => ({ ...t, winrate: pct(t.wins, t.games) }));
+  };
+  const allies = tally('allies');
+  const enemies = tally('enemies');
+  const best = (list) => [...list].sort((a, b) => b.winrate - a.winrate || b.games - a.games).slice(0, limit);
+  const worst = (list) => [...list].sort((a, b) => a.winrate - b.winrate || b.games - a.games).slice(0, limit);
+  return {
+    games: games.length,
+    baseline: winrateOf(games).winrate,
+    minGames,
+    bestAllies: best(allies),
+    worstAllies: worst(allies),
+    easiestEnemies: best(enemies),
+    hardestEnemies: worst(enemies),
+  };
+}
+
+/** Grovt: motståndarlaget räknas som "tung" i en typ om minst två champions har den som första tagg. */
+export const COMP_TYPES = { Tank: 'Tanks', Assassin: 'Assassins', Mage: 'Mages', Fighter: 'Fighters', Marksman: 'Marksmen' };
+
+/** Modul 4: mot motståndarens jungler (med early-diff) och mot olika lagkompositioner. */
+export function matchupReport(rows, { tags = () => [], minGames = 3, limit = 8 } = {}) {
+  if (!rows.length) return null;
+  const junglers = new Map();
+  for (const r of rows) {
+    if (r.opponent_champion_id == null) continue;
+    const j = junglers.get(r.opponent_champion_id) || { championId: r.opponent_champion_id, list: [] };
+    j.list.push(r);
+    junglers.set(r.opponent_champion_id, j);
+  }
+  const vsJungler = [...junglers.values()]
+    .filter((j) => j.list.length >= minGames)
+    .map((j) => {
+      const g10 = j.list.map((r) => diffAt(r, 10, 'gold')).filter((x) => x != null);
+      const x10 = j.list.map((r) => diffAt(r, 10, 'xp')).filter((x) => x != null);
+      return { championId: j.championId, ...winrateOf(j.list), goldDiff10: g10.length ? round(mean(g10), 0) : null, xpDiff10: x10.length ? round(mean(x10), 0) : null };
+    })
+    .sort((a, b) => b.games - a.games)
+    .slice(0, limit);
+
+  const profiles = [
+    ['Mest AD (under 35 % magisk skada)', (s) => s < 35],
+    ['Blandad skada', (s) => s >= 35 && s <= 55],
+    ['Mest AP (över 55 % magisk skada)', (s) => s > 55],
+  ].map(([label, test]) => ({ label, ...winrateOf(rows.filter((r) => r.enemy_ap_share != null && test(Number(r.enemy_ap_share)))) }));
+
+  const withEnemies = rows.filter((r) => Array.isArray(r.enemies) && r.enemies.length);
+  const hasTags = withEnemies.some((r) => r.enemies.some((id) => tags(id).length));
+  const comps = hasTags
+    ? Object.entries(COMP_TYPES).map(([tag, label]) => ({
+      label: `2+ ${label}`,
+      ...winrateOf(withEnemies.filter((r) => r.enemies.filter((id) => tags(id)[0] === tag).length >= 2)),
+    })).filter((c) => c.games >= minGames)
+    : [];
+
+  return { vsJungler, profiles, comps };
+}
+
+/** Modul 5: hur tidig prestation hänger ihop med vinst (samband, inte orsak). */
+export function impactReport(rows) {
+  const games = rows.filter((r) => r.early && r.early.me);
+  if (!games.length) return null;
+  const group = (label, list) => ({ label, ...winrateOf(list) });
+  const g10 = (r) => diffAt(r, 10, 'gold');
+  const withDiff = games.filter((r) => g10(r) != null);
+  const deaths10 = (r) => (r.early.me[10] ? r.early.me[10].d : null);
+  const withD = games.filter((r) => deaths10(r) != null);
+  const fb = games.filter((r) => r.early.firstBlood !== undefined);
+  return {
+    goldDiff10: [
+      group('Mer än 1 000 efter', withDiff.filter((r) => g10(r) < -1000)),
+      group('300–1 000 efter', withDiff.filter((r) => g10(r) >= -1000 && g10(r) < -300)),
+      group('Jämnt (±300)', withDiff.filter((r) => g10(r) >= -300 && g10(r) <= 300)),
+      group('300–1 000 före', withDiff.filter((r) => g10(r) > 300 && g10(r) <= 1000)),
+      group('Mer än 1 000 före', withDiff.filter((r) => g10(r) > 1000)),
+    ],
+    deaths10: [
+      group('0 dödsfall', withD.filter((r) => deaths10(r) === 0)),
+      group('1 dödsfall', withD.filter((r) => deaths10(r) === 1)),
+      group('2+ dödsfall', withD.filter((r) => deaths10(r) >= 2)),
+    ],
+    firstBlood: [
+      group('Du tog first blood', fb.filter((r) => r.early.firstBlood === 'kill')),
+      group('Assist på first blood', fb.filter((r) => r.early.firstBlood === 'assist')),
+      group('Du dog först', fb.filter((r) => r.early.firstBlood === 'died')),
+      group('Utan dig', fb.filter((r) => r.early.firstBlood == null)),
+    ],
+  };
+}

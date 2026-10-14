@@ -358,3 +358,25 @@ body.is-locked .bg {
 .ganks small { font-size: 11.5px; }
 @media (max-width: 420px) { .ganks td small { display: block; } }
 .card__hint--after { margin: 14px 0 0; }
+
+/* Early game, synergier, matchups, tidigt → vinst */
+[data-early-card], [data-impact-card], [data-matchup-card], [data-synergy-card] { margin-top: 14px; }
+.early td, .matchups td { min-width: 64px; }
+.pos { color: var(--win); font-weight: 600; }
+.neg { color: var(--loss); font-weight: 600; }
+.champ-cell { display: inline-flex; align-items: center; gap: 8px; }
+.champ-cell .champ { width: 28px; height: 28px; }
+.split { display: grid; gap: 4px 18px; }
+@media (min-width: 720px) { .split { grid-template-columns: 1fr 1fr; } }
+.split .sub { margin-top: 10px; }
+.wrbars { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.wrbars li { display: grid; grid-template-columns: minmax(0, 11rem) minmax(0, 1fr) auto; align-items: center; gap: 10px; font-size: 13.5px; }
+.wrbars__label { color: var(--muted); }
+.wrbars__track { position: relative; height: 10px; border-radius: 999px; background: rgba(143, 211, 255, .1); overflow: hidden; }
+.wrbars__track::after { content: ''; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: rgba(238, 244, 255, .35); }
+.wrbars__track i { display: block; height: 100%; border-radius: 999px; }
+.wrbars__track i.is-good { background: linear-gradient(90deg, rgba(111, 211, 255, .35), var(--win)); }
+.wrbars__track i.is-bad { background: linear-gradient(90deg, rgba(255, 107, 129, .35), var(--loss)); }
+.wrbars__value { font-weight: 600; white-space: nowrap; }
+.wrbars__value small { color: var(--muted); font-weight: 400; }
+@media (max-width: 420px) { .wrbars li { grid-template-columns: 1fr auto; } .wrbars__track { grid-column: 1 / -1; grid-row: 2; } }

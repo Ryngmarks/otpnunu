@@ -26,6 +26,8 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 const CHAMPS = { 20: 'Nunu', 64: 'LeeSin', 104: 'Graves', 121: 'Khazix', 254: 'Vi', 234: 'Viego', 76: 'Nidalee', 59: 'JarvanIV', 113: 'Sejuani', 79: 'Gragas', 523: 'Aphelios', 103: 'Ahri', 22: 'Ashe', 412: 'Thresh', 86: 'Garen' };
 const JUNGLERS = [64, 104, 121, 254, 234, 76, 59, 113];
+const TAGS = { 20: 'Tank', 64: 'Fighter', 104: 'Marksman', 121: 'Assassin', 254: 'Fighter', 234: 'Assassin', 76: 'Assassin', 59: 'Tank', 113: 'Tank', 79: 'Fighter', 523: 'Marksman', 103: 'Mage', 22: 'Marksman', 412: 'Support', 86: 'Fighter' };
+const LANERS = [79, 523, 103, 22, 412, 86];
 
 function rng(seed) {
   return () => { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; };
@@ -56,10 +58,23 @@ function buildHistory(puuid, size, seed) {
     const start = Date.UTC(2026, 9, 14) - i * 1000 * 3600 * (5 + Math.floor(rand() * 30));
     games.push({
       metadata: { matchId: `EUW1_${n}`, dataVersion: '2' },
-      info: { gameStartTimestamp: start, gameEndTimestamp: start + dur * 1000, gameDuration: dur, queueId: queue, gameVersion: '16.20.1', participants: [me, enemy] },
+      info: { gameStartTimestamp: start, gameEndTimestamp: start + dur * 1000, gameDuration: dur, queueId: queue, gameVersion: '16.20.1', participants: [me, enemy, ...others(rand, win, me, enemy)] },
     });
   }
   return games;
+}
+
+/** Fyra lagkamrater och fyra motståndare med slumpade champions (för synergier och lagkompositioner). */
+function others(rand, win, me, enemy) {
+  const pos = ['TOP', 'MIDDLE', 'BOTTOM', 'UTILITY'];
+  const used = new Set([me.championId, enemy.championId]);
+  const pick = () => { let c; do { c = LANERS[Math.floor(rand() * LANERS.length)]; } while (used.has(c) && used.size < 8); used.add(c); return c; };
+  return [100, 200].flatMap((teamId, t) => pos.map((p, i) => {
+    const championId = pick();
+    const dmg = 12000 + Math.floor(rand() * 15000);
+    const magic = TAGS[championId] === 'Mage' ? 0.85 : TAGS[championId] === 'Assassin' ? 0.4 : 0.1;
+    return { participantId: (t ? 7 : 2) + i, puuid: `p-${teamId}-${i}-${championId}`, teamId, teamPosition: p, championId, championName: CHAMPS[championId], win: teamId === 100 ? win : !win, totalDamageDealtToChampions: dmg, magicDamageDealtToChampions: Math.round(dmg * magic) };
+  }));
 }
 
 /** Tidslinje till en låtsasmatch: jämn skada per minut och dödsfallen utspridda över matchen. */
@@ -67,9 +82,13 @@ function buildTimeline(match) {
   const me = match.info.participants[0];
   const minutes = Math.floor(match.info.gameDuration / 60);
   const perMin = Math.round((me.totalDamageDealtToChampions || 0) / Math.max(1, minutes));
+  const seed0 = Number(match.metadata.matchId.slice(-3));
   const frames = Array.from({ length: minutes + 1 }, (_, m) => ({
     timestamp: m * 60000,
-    participantFrames: { 1: { damageStats: { totalDamageDoneToChampions: m * perMin, totalDamageTaken: m * 700 } } },
+    participantFrames: {
+      1: { damageStats: { totalDamageDoneToChampions: m * perMin, totalDamageTaken: m * 700 }, totalGold: 500 + m * (380 + (seed0 % 7) * 15), xp: m * 410, level: Math.min(18, 1 + Math.floor(m / 1.6)), minionsKilled: m * 1, jungleMinionsKilled: m * 5 },
+      6: { totalGold: 500 + m * (360 + (seed0 % 5) * 20), xp: m * 400, level: Math.min(18, 1 + Math.floor(m / 1.6)), minionsKilled: m, jungleMinionsKilled: m * 5 - (seed0 % 3) },
+    },
     events: [],
   }));
   const places = [{ name: 'SRU_Blue', type: 'MONSTER' }, { name: 'SRU_Dragon_Fire', type: 'MONSTER' }, { name: 'Turret_T2_C_05_A', type: 'TOWER' }, { name: 'SRU_ChaosMinionMelee', type: 'MINION' }, null];
@@ -254,7 +273,7 @@ export function createDevServer({ port = 8787, riot = createFakeRiot(), store = 
     // Data Dragon
     if (p === '/ddragon/api/versions.json') return send(res, 200, ['16.20.1']);
     if (p.endsWith('/champion.json')) {
-      const data = Object.fromEntries(Object.entries(CHAMPS).map(([key, id]) => [id, { key, name: id === 'Nunu' ? 'Nunu & Willump' : id.replace(/([a-z])([A-Z])/g, '$1 $2'), image: { full: `${id}.png` } }]));
+      const data = Object.fromEntries(Object.entries(CHAMPS).map(([key, id]) => [id, { key, name: id === 'Nunu' ? 'Nunu & Willump' : id.replace(/([a-z])([A-Z])/g, '$1 $2'), image: { full: `${id}.png` }, tags: [TAGS[key]] }]));
       return send(res, 200, { data });
     }
     if (p.startsWith('/ddragon/cdn/') && p.endsWith('.png')) {

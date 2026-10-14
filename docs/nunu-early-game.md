@@ -65,8 +65,11 @@ dödsfall före 10 min, first blood. Det visar *samband* – en tidig ledning ka
 
 ## Moduler (en i taget)
 
-1. **Ganks** – detta steg. Ny kolumn `ganks` (jsonb) i `account_match`, räknas fram av synken (derived_version 3).
-2. **Early game 5/10/15** – kolumn `early` (jsonb): dina värden och diff mot motståndarens jungler.
-3. **Synergier** – lag- och motståndarchampions per match.
-4. **Matchups och kompositioner** – jungler-matchups med early-diff, skadeprofil.
-5. **Tidigt → vinst** – vinstprocent per grupp, ovanpå 1–4.
+1. **Ganks** – klar. Ny kolumn `ganks` (jsonb) i `account_match`, räknas fram av synken (derived_version 3).
+2. **Early game 5/10/15** – klar. Kolumn `early` (jsonb): dina värden, motståndarens och first blood (`early.mjs`).
+3. **Synergier** – klar. Kolumnerna `allies` och `enemies`; kortet visar champions med minst 5 matcher.
+4. **Matchups och kompositioner** – klar. Jungler-matchups med guld/XP-diff vid 10 min, `enemy_ap_share`
+   (skadeprofil) och Data Dragons klassning (2+ av samma typ, ungefärligt).
+5. **Tidigt → vinst** – klar. Vinst per guld-diff vid 10 min, dödsfall före 10 min och first blood.
+
+Allt räknas fram av synken (derived_version 4, `006_early.sql`) ur sparad rådata och sparade tidslinjer.
