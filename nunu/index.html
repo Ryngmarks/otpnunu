@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#080c1c">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Nunu Career</title>
+  <link rel="icon" href="assets/nunu-icon.png" type="image/png">
+  <link rel="apple-touch-icon" href="assets/nunu-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/nunu.css">
+</head>
+<body class="is-locked">
+  <div class="bg" aria-hidden="true"></div>
+
+  <!-- ============ INLOGGNING ============ -->
+  <section class="login" data-login hidden>
+    <div class="login__card">
+      <p class="eyebrow">Nunu &amp; Willump</p>
+      <h1 class="title">Nunu Career</h1>
+      <p class="muted">Logga in med samma konto som i Notvikens IK-appen.</p>
+      <form data-login-form method="post" action="#" novalidate>
+        <label class="field">
+          <span>E-post</span>
+          <input type="email" name="email" autocomplete="username" inputmode="email" autocapitalize="off" spellcheck="false" required>
+        </label>
+        <label class="field">
+          <span>Lösenord</span>
+          <input type="password" name="password" autocomplete="current-password" required>
+        </label>
+        <p class="error" data-login-error role="alert" hidden></p>
+        <button class="btn btn--primary btn--block" type="submit">Logga in</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- ============ INGEN ÅTKOMST ============ -->
+  <section class="login" data-denied hidden>
+    <div class="login__card">
+      <p class="eyebrow">Nunu Career</p>
+      <h1 class="title">Ingen åtkomst</h1>
+      <p class="muted">Ditt konto har inte tillgång till Nunu än. Be den som administrerar appen att lägga till dig.</p>
+      <button class="btn btn--ghost btn--block" data-action="logout">Logga ut</button>
+    </div>
+  </section>
+
+  <!-- ============ CAREER ============ -->
+  <main class="app" data-app hidden>
+    <header class="top">
+      <div>
+        <p class="eyebrow">Nunu Career</p>
+        <p class="top__name" data-profile-name></p>
+      </div>
+      <button class="btn btn--primary" data-action="sync" disabled>
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 01-14.3 4.9M4 12a8 8 0 0114.3-4.9"/><path d="M18.5 3v4.2h-4.2M5.5 21v-4.2h4.2"/></svg>
+        Synka
+      </button>
+    </header>
+
+    <section class="hero" data-hero></section>
+
+    <section class="sync card" data-sync hidden>
+      <div class="sync__text">
+        <strong data-sync-title>Synkar…</strong>
+        <small data-sync-detail></small>
+      </div>
+      <div class="sync__bar"><i data-sync-bar></i></div>
+      <button class="link-btn" data-action="cancel-sync">Avbryt</button>
+    </section>
+
+    <nav class="filters" aria-label="Filter">
+      <div class="seg" data-filter-champion>
+        <button data-champion="nunu">Nunu</button>
+        <button data-champion="all">Alla champions</button>
+      </div>
+      <div class="chips" data-filter-queue></div>
+      <select class="select" data-filter-account aria-label="Konto"></select>
+    </nav>
+
+    <section class="tiles" data-tiles></section>
+    <div class="form-strip" data-form></div>
+
+    <div class="columns">
+      <section class="card">
+        <h2 class="card__title">Matcher</h2>
+        <div data-matches></div>
+      </section>
+
+      <div class="side">
+        <section class="card">
+          <h2 class="card__title">Konton</h2>
+          <div data-accounts></div>
+          <form class="link-form" data-link-form>
+            <input name="riotId" placeholder="Namn#Tagg" autocomplete="off" autocapitalize="off" spellcheck="false" required aria-label="Riot ID">
+            <select name="platform" class="select" aria-label="Server">
+              <option value="euw1">EUW</option>
+              <option value="eun1">EUNE</option>
+              <option value="na1">NA</option>
+              <option value="kr">KR</option>
+              <option value="br1">BR</option>
+              <option value="tr1">TR</option>
+              <option value="oc1">OCE</option>
+              <option value="jp1">JP</option>
+            </select>
+            <button class="btn btn--ghost" type="submit">+ Koppla</button>
+          </form>
+        </section>
+
+        <section class="card">
+          <h2 class="card__title">Vanligaste motståndarna</h2>
+          <p class="card__hint">Samma position, minst 2 möten</p>
+          <div data-opponents></div>
+        </section>
+      </div>
+    </div>
+
+    <footer class="footer">
+      <p><span data-user-email></span> · <button class="link-btn" data-action="logout">Logga ut</button></p>
+      <p>Nunu Career isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games
+        or anyone officially involved in producing or managing Riot Games properties. Riot Games, and all
+        associated properties are trademarks or registered trademarks of Riot Games, Inc.</p>
+    </footer>
+  </main>
+
+  <div class="toast" data-toast role="status" aria-live="polite"></div>
+
+  <script src="../js/config.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

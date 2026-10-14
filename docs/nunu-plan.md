@@ -5,8 +5,8 @@ matchanalys, en personlig Playbook och på sikt livefunktioner.
 
 **Status**
 - Steg 1 – API-test: **klart** (se avsnitt 5).
-- Fas 1 – Nunu Career: **databas och Edge Function klara och testade lokalt.** Inget är kört i
-  Supabase än. Webbsidan `/nunu/` är nästa steg.
+- Fas 1 – Nunu Career: **databas, Edge Function och webbsidan klara och testade lokalt.**
+  Inget är kört i Supabase än och `/nunu/` är inte publicerad (ligger bara på `nunu/dev`).
 - Fotbollsappen, dess data och dess tabeller är orörda.
 
 ---
@@ -49,7 +49,7 @@ Modulerna pratar med varandra bara via databasen.
 | **Matchanalys** | Rena funktioner: rådata in → rader ut. Kan köras om på all rådata. | `supabase/functions/nunu-riot/derive.mjs` |
 | **Databas (server)** | De få databasoperationer synken behöver. | `supabase/functions/nunu-riot/db.mjs` |
 | **HTTP** | Inloggning, medlemskap, CORS, fördelning av anrop. | `supabase/functions/nunu-riot/handler.mjs`, `index.ts` |
-| **Career** (fas 1) | Webbsidan: profil, konton, synk, historik, mastery, grundstatistik. | `nunu/` *(nästa steg)* |
+| **Career** (fas 1) | Webbsidan: inloggning, konton, synk, mastery, grundstatistik, matcher, motståndare. | `nunu/js/core/` (inloggning, data, Data Dragon), `nunu/js/career/` (statistik, vyer), `nunu/js/app.js` |
 | **Playbook** (fas 2) | Egna anteckningar per matchup. | – |
 | **Matchplanering** (fas 3) | Plan inför match. | – |
 | **Live** (fas 4) | Insamling under match via ett litet program på spel-datorn. | – |
@@ -60,7 +60,11 @@ testas i Node.
 ### Mappar
 
 ```
-nunu/                              webbappen → …github.io/Notvikens-t-vlings-app/nunu/  (nästa steg)
+nunu/                              webbappen → …github.io/Notvikens-t-vlings-app/nunu/
+  index.html, css/, assets/        sidan, tema och splash-bild
+  js/core/                         inloggning (samma konton som fotbollen), data, champion-namn
+  js/career/                       statistik (rena funktioner) och vyer
+  tests/                           tester + dev-server.mjs (hela appen lokalt utan Supabase/Riot)
   tools/riot-api-test.mjs          API-testet från steg 1
 supabase/nunu/001_init.sql         schemat nunu – körs för hand i SQL Editor
 supabase/nunu/tests/               databastester (SQL) och tester för Edge Function (Node)
@@ -177,11 +181,16 @@ har konton. **Innan någon annan får ett konto** ska fotbollen få en medlemsli
      (och väntar `retryAfter` sekunder om Riot bett om det).
    - 20 enhetstester mot en låtsas-Riot och en minnesdatabas, typkontroll i Deno.
 
+3. **Webbsidan `/nunu/`** – inloggning med samma konto som fotbollen (egen session), "Ingen åtkomst"
+   för icke-medlemmar, koppla/koppla bort konton, Synka med förlopp och automatisk väntan när Riot
+   begränsar takten, mastery (summerad över konton), matcher, vinst %, KDA, CS/min, guld/min,
+   senaste 10, matchlista med motståndare, vanligaste motståndarjunglers. Filter: Nunu/alla champions,
+   kö (rankat, solo, flex, normal, Rift, alla) och konto. Remakes räknas aldrig.
+   Champion-namn och ikoner från Riots öppna Data Dragon. 9 enhetstester + 26 kontroller i webbläsare.
+
 ### Kvar i fas 1
-3. Webbsidan `/nunu/`: inloggning (samma konto som fotbollen), profil med konton, knappen Synka
-   med förlopp, översikt (matcher, vinstprocent, KDA, CS/min, mastery per konto och totalt),
-   matchlista med filter för kö.
 4. Kör allt mot Supabase och verifiera med riktig data.
+5. Publicera: för över `nunu/dev` till deploy-branchen (ditt beslut).
 
 **Klart när:** du kan koppla två konton, synka hela historiken och se samlad statistik –
 och en annan användare ser ingenting.
@@ -198,10 +207,19 @@ och en annan användare ser ingenting.
 |---|---|
 | Databas | **För hand:** kör `supabase/nunu/001_init.sql` i SQL Editor. SQL körs aldrig automatiskt. |
 | Edge Function | **Automatiskt** via `nunu-ci.yml` när secret `SUPABASE_ACCESS_TOKEN` finns – annars bara tester. Riot-nyckeln förs över från GitHub-secret `RIOT_API_KEY`. |
-| Webbsida | GitHub Pages, när `nunu/dev` förs över till deploy-branchen. |
+| Webbsida | GitHub Pages, när `nunu/dev` förs över till deploy-branchen. Använder samma `js/config.js` (Supabase-adress och publik nyckel) som fotbollsappen. |
 
 `SUPABASE_ACCESS_TOKEN` ger tillgång till alla dina Supabase-projekt (även matappens). Alternativet
 är att driftsätta för hand med Supabase CLI från en dator.
+
+### Lokal utveckling
+```bash
+node nunu/tests/dev-server.mjs        # → http://localhost:8787/nunu/  (johan@nik.se / nunu123)
+node --test "nunu/tests/*.test.mjs" "supabase/nunu/tests/*.test.mjs" "nunu/tools/*.test.mjs"
+bash supabase/nunu/tests/run.sh       # databastester, kräver Postgres
+```
+Dev-servern kör den riktiga webbsidan och den riktiga Edge Function-koden mot en låtsasdatabas
+(med samma radskydd) och en låtsas-Riot med 230 + 45 matcher.
 
 ## 8. Manuella steg
 
