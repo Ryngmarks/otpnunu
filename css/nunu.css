@@ -361,7 +361,13 @@ body.is-locked .bg {
 
 /* Early game, synergier, matchups, tidigt → vinst */
 [data-early-card], [data-impact-card], [data-matchup-card], [data-synergy-card] { margin-top: 14px; }
-.early td, .matchups td { min-width: 64px; }
+.early td { min-width: 64px; }
+.matchups th:first-child { white-space: normal; }
+@media (max-width: 420px) {
+  .hide-sm { display: none; }
+  .matchups th, .matchups td { padding-left: 4px; padding-right: 4px; }
+  .champ-cell .champ { display: none; }
+}
 .pos { color: var(--win); font-weight: 600; }
 .neg { color: var(--loss); font-weight: 600; }
 .champ-cell { display: inline-flex; align-items: center; gap: 8px; }

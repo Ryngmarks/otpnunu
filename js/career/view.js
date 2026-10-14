@@ -304,12 +304,12 @@ export function matchupHtml(rep, champs) {
   return `
     ${rep.vsJungler.length ? `
     <table class="career matchups">
-      <thead><tr><th scope="col">Jungler</th><th scope="col">Matcher</th><th scope="col">Vinst</th><th scope="col">Guld 10 min</th><th scope="col">XP 10 min</th></tr></thead>
+      <thead><tr><th scope="col">Jungler</th><th scope="col">Matcher</th><th scope="col">Vinst</th><th scope="col">Guld 10′</th><th scope="col" class="hide-sm">XP 10′</th></tr></thead>
       <tbody>${rep.vsJungler.map((j) => `
         <tr><th scope="row"><span class="champ-cell">${champIcon(champs, j.championId)}${esc(champs.name(j.championId))}</span></th>
           <td>${j.games}</td>
           <td><span class="wr ${j.winrate >= 50 ? 'wr--good' : 'wr--bad'}">${j.winrate}%</span></td>
-          <td>${diffCell(j.goldDiff10)}</td><td>${diffCell(j.xpDiff10)}</td></tr>`).join('')}
+          <td>${diffCell(j.goldDiff10)}</td><td class="hide-sm">${diffCell(j.xpDiff10)}</td></tr>`).join('')}
       </tbody>
     </table>` : '<p class="empty">För få matcher mot samma jungler.</p>'}
     <h3 class="sub">Motståndarlagets skada</h3>

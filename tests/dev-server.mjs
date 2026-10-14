@@ -24,10 +24,10 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 /* ---------------- Låtsas-Riot ---------------- */
 
-const CHAMPS = { 20: 'Nunu', 64: 'LeeSin', 104: 'Graves', 121: 'Khazix', 254: 'Vi', 234: 'Viego', 76: 'Nidalee', 59: 'JarvanIV', 113: 'Sejuani', 79: 'Gragas', 523: 'Aphelios', 103: 'Ahri', 22: 'Ashe', 412: 'Thresh', 86: 'Garen' };
+const CHAMPS = { 99: 'Lux', 157: 'Yasuo', 238: 'Zed', 266: 'Aatrox', 517: 'Sylas', 89: 'Leona', 25: 'Morgana', 63: 'Brand', 20: 'Nunu', 64: 'LeeSin', 104: 'Graves', 121: 'Khazix', 254: 'Vi', 234: 'Viego', 76: 'Nidalee', 59: 'JarvanIV', 113: 'Sejuani', 79: 'Gragas', 523: 'Aphelios', 103: 'Ahri', 22: 'Ashe', 412: 'Thresh', 86: 'Garen' };
 const JUNGLERS = [64, 104, 121, 254, 234, 76, 59, 113];
-const TAGS = { 20: 'Tank', 64: 'Fighter', 104: 'Marksman', 121: 'Assassin', 254: 'Fighter', 234: 'Assassin', 76: 'Assassin', 59: 'Tank', 113: 'Tank', 79: 'Fighter', 523: 'Marksman', 103: 'Mage', 22: 'Marksman', 412: 'Support', 86: 'Fighter' };
-const LANERS = [79, 523, 103, 22, 412, 86];
+const TAGS = { 99: 'Mage', 157: 'Fighter', 238: 'Assassin', 266: 'Fighter', 517: 'Mage', 89: 'Tank', 25: 'Mage', 63: 'Mage', 20: 'Tank', 64: 'Fighter', 104: 'Marksman', 121: 'Assassin', 254: 'Fighter', 234: 'Assassin', 76: 'Assassin', 59: 'Tank', 113: 'Tank', 79: 'Fighter', 523: 'Marksman', 103: 'Mage', 22: 'Marksman', 412: 'Support', 86: 'Fighter' };
+const LANERS = [79, 523, 103, 22, 412, 86, 99, 157, 238, 266, 517, 89, 25, 63];
 
 function rng(seed) {
   return () => { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; };
@@ -68,7 +68,12 @@ function buildHistory(puuid, size, seed) {
 function others(rand, win, me, enemy) {
   const pos = ['TOP', 'MIDDLE', 'BOTTOM', 'UTILITY'];
   const used = new Set([me.championId, enemy.championId]);
-  const pick = () => { let c; do { c = LANERS[Math.floor(rand() * LANERS.length)]; } while (used.has(c) && used.size < 8); used.add(c); return c; };
+  const pick = () => {
+    let c = LANERS[Math.floor(rand() * LANERS.length)];
+    for (let tries = 0; used.has(c) && tries < 20; tries++) c = LANERS[Math.floor(rand() * LANERS.length)];
+    used.add(c);
+    return c;
+  };
   return [100, 200].flatMap((teamId, t) => pos.map((p, i) => {
     const championId = pick();
     const dmg = 12000 + Math.floor(rand() * 15000);
