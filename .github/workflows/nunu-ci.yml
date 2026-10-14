@@ -1,11 +1,21 @@
-# otpnunu – tester vid varje push till nunu/dev.
-# Enhetstester, servern med låtsas-Riot och synken mot en riktig PostgreSQL.
-# Inget driftsätts härifrån – appen körs lokalt (npm start).
-name: otpnunu – tester
+# Nunu – tester och (valfri) driftsättning av Edge Function nunu-riot.
+#
+# Körs vid pushar till nunu/dev som rör Nunu-backend.
+# Driftsättningen sker bara om secret SUPABASE_ACCESS_TOKEN finns
+# (Supabase → Account → Access Tokens). Utan den körs bara testerna.
+# SQL körs aldrig automatiskt – det görs för hand i Supabase SQL Editor.
+name: Nunu – tester och driftsättning
 
 on:
   push:
     branches: [nunu/dev]
+    paths:
+      - 'supabase/nunu/**'
+      - 'supabase/functions/nunu-riot/**'
+      - 'js/**'
+      - 'tests/**'
+      - 'tools/**'
+      - '.github/workflows/nunu-ci.yml'
   workflow_dispatch:
 
 permissions:
@@ -29,11 +39,53 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
-      - run: npm ci
+      - name: Enhetstester (Edge Function)
+        run: node --test "supabase/nunu/tests/*.test.mjs"
 
-      - name: Tester (med PostgreSQL)
+      - name: Enhetstester (webbsidan)
+        run: node --test "tests/*.test.mjs"
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Typkontroll (Deno)
+        run: deno check supabase/functions/nunu-riot/index.ts
+
+      - name: Databastester (rättigheter och radskydd)
         env:
-          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
-        run: npm test
+          PGHOST: localhost
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: bash supabase/nunu/tests/run.sh
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      RIOT_API_KEY: ${{ secrets.RIOT_API_KEY }}
+      PROJECT_REF: plpdcathcozyjraonouo
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Driftsätt nunu-riot
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
+            echo "SUPABASE_ACCESS_TOKEN saknas – driftsättning hoppas över."
+            exit 0
+          fi
+          supabase functions deploy nunu-riot --project-ref "$PROJECT_REF" --no-verify-jwt
+          if [ -n "$RIOT_API_KEY" ]; then
+            umask 077
+            printf 'RIOT_API_KEY=%s\n' "$RIOT_API_KEY" > "$RUNNER_TEMP/nunu.env"
+            supabase secrets set --env-file "$RUNNER_TEMP/nunu.env" --project-ref "$PROJECT_REF"
+            rm -f "$RUNNER_TEMP/nunu.env"
+          fi

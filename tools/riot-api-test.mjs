@@ -9,7 +9,7 @@
  *   - champion mastery för Nunu & Willump
  * och skriver en rapport om datavolym, historik och hastighetsgränser.
  *
- * Inget sparas i databasen. Rådata skrivs bara till disk om --save <mapp> anges.
+ * Inget sparas i Supabase. Rådata skrivs bara till disk om --save <mapp> anges.
  *
  * Körning:
  *   RIOT_API_KEY=RGAPI-… node tools/riot-api-test.mjs

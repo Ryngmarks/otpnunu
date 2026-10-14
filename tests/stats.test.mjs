@@ -134,6 +134,7 @@ test('careerSummary: synkade matcher före säsongens slut räknas inte två gå
   assert.equal(c.total.games, 11);
 });
 
+
 test('damageReport: vinster mot förluster och dödsfallen', async () => {
   const { damageReport } = await import('../js/career/stats.js');
   const { damageHtml } = await import('../js/career/view.js');

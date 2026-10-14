@@ -24,7 +24,10 @@
       <h1 class="title">otpnunu</h1>
       <p class="muted">Statistik, mastery och historik för Nunu &amp; Willump.</p>
       <form data-login-form method="post" action="#" novalidate>
-        <input type="text" name="username" value="otpnunu" autocomplete="username" hidden>
+        <label class="field">
+          <span>E-post</span>
+          <input type="email" name="email" autocomplete="username" inputmode="email" autocapitalize="off" spellcheck="false" required>
+        </label>
         <label class="field">
           <span>Lösenord</span>
           <input type="password" name="password" autocomplete="current-password" required>
@@ -32,6 +35,16 @@
         <p class="error" data-login-error role="alert" hidden></p>
         <button class="btn btn--primary btn--block" type="submit">Logga in</button>
       </form>
+    </div>
+  </section>
+
+  <!-- ============ INGEN ÅTKOMST ============ -->
+  <section class="login" data-denied hidden>
+    <div class="login__card">
+      <p class="eyebrow">otpnunu</p>
+      <h1 class="title">Ingen åtkomst</h1>
+      <p class="muted">Ditt konto har inte tillgång till Nunu än. Be den som administrerar appen att lägga till dig.</p>
+      <button class="btn btn--ghost btn--block" data-action="logout">Logga ut</button>
     </div>
   </section>
 
@@ -118,7 +131,7 @@
     </div>
 
     <footer class="footer">
-      <p>Körs lokalt på din dator<span data-logout-wrap> · <button class="link-btn" data-action="logout">Logga ut</button></span></p>
+      <p><span data-user-email></span> · <button class="link-btn" data-action="logout">Logga ut</button></p>
       <p>otpnunu isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games
         or anyone officially involved in producing or managing Riot Games properties. Riot Games, and all
         associated properties are trademarks or registered trademarks of Riot Games, Inc.</p>
@@ -127,6 +140,7 @@
 
   <div class="toast" data-toast role="status" aria-live="polite"></div>
 
+  <script src="js/config.js"></script>
   <script type="module" src="js/app.js"></script>
 </body>
 </html>

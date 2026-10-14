@@ -1,7 +1,7 @@
 // Tester för skadeanalysen (server/analysis/damage.mjs). Kör: npm test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { damageCurve, damageAt, deaths, deriveTimeline, placeOf } from '../server/analysis/damage.mjs';
+import { damageCurve, damageAt, deaths, deriveTimeline, placeOf } from '../supabase/functions/nunu-riot/damage.mjs';
 
 const ME = 'me-puuid';
 const p = (participantId, puuid, championName, teamId, teamPosition, dmg, extra = {}) => ({

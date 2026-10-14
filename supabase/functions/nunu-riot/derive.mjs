@@ -7,7 +7,7 @@
  *   1: grundstatistik
  *   2: skada (typ, tagen, andel av laget, motståndarens) och tidslinjen (skada vid 10/14/20 min, dödsfall)
  */
-import { deriveTimeline } from '../analysis/damage.mjs';
+import { deriveTimeline } from './damage.mjs';
 
 export const DERIVED_VERSION = 2;
 export const NUNU_CHAMPION_ID = 20;

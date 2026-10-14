@@ -8,16 +8,17 @@ import { esc, heroHtml, tilesHtml, formHtml, accountsHtml, opponentsHtml, matche
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
+const cfg = window.APP_CONFIG || {};
 const FILTER_KEY = 'nunu-filters';
 const PAGE = 20;
 
 const state = {
+  profile: null,
   accounts: [],
   matches: [],
   mastery: [],
   history: [],
   deaths: [],
-  passwordRequired: false,
   champs: { name: (id) => `#${id}`, icon: () => null },
   filters: { champion: 'nunu', queue: 'rift', account: '' },
   limit: PAGE,
@@ -26,7 +27,7 @@ const state = {
 };
 try { Object.assign(state.filters, JSON.parse(localStorage.getItem(FILTER_KEY))); } catch (e) { /* ignorera */ }
 
-const api = createApi();
+let api;
 
 /* ---------------- Hjälpare ---------------- */
 
@@ -53,11 +54,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 function show(view) {
   document.body.classList.toggle('is-locked', view !== 'app');
   $('[data-login]').hidden = view !== 'login';
+  $('[data-denied]').hidden = view !== 'denied';
   $('[data-app]').hidden = view !== 'app';
 }
 
 function showLogin(message) {
-  Object.assign(state, { accounts: [], matches: [], mastery: [], history: [], deaths: [] });
+  Object.assign(state, { profile: null, accounts: [], matches: [], mastery: [], history: [], deaths: [] });
   show('login');
   const err = $('[data-login-error]');
   err.textContent = message || '';
@@ -75,8 +77,9 @@ function render() {
   const accountRows = filterMatches(state.matches, { champion, queues });
 
   const first = state.accounts[0];
-  $('[data-profile-name]').textContent = first ? `${first.game_name}#${first.tag_line}` : 'Välkommen';
-  $('[data-logout-wrap]').hidden = !state.passwordRequired;
+  $('[data-profile-name]').textContent = (state.profile && state.profile.display_name)
+    || (first ? `${first.game_name}#${first.tag_line}` : 'Välkommen');
+  $('[data-user-email]').textContent = api.email;
   $('[data-action="sync"]').disabled = !state.accounts.length || state.syncing;
 
   const mastery = masterySummary(f.account ? state.mastery.filter((m) => m.puuid === f.account) : state.mastery);
@@ -104,7 +107,11 @@ function render() {
 }
 
 async function reload() {
-  const { accounts, matches, mastery, history, deaths } = await api.data();
+  const [accounts, matches, mastery, history, deaths] = await Promise.all([
+    api.accounts(), api.matches(), api.mastery(),
+    api.seasonHistory().catch(() => []),  // 002_season_history.sql är valfri
+    api.deaths().catch(() => []),         // 003_timelines.sql är valfri
+  ]);
   Object.assign(state, { accounts, matches, mastery, history, deaths });
   if (state.filters.account && !accounts.some((a) => a.puuid === state.filters.account)) state.filters.account = '';
   render();
@@ -130,7 +137,7 @@ async function sync() {
   try {
     syncStatus({ title: 'Synkar…', detail: 'Hämtar från Riot', progress: 0.02 });
     while (!state.cancelSync) {
-      const r = await api.sync();
+      const r = await api.riot({ action: 'sync' });
       imported += r.results.reduce((s, x) => s + x.imported, 0);
       const remaining = r.results.reduce((s, x) => s + x.remaining, 0);
       await reload();
@@ -171,7 +178,7 @@ function bind() {
     const btn = form.querySelector('button');
     btn.disabled = true;
     try {
-      await api.signIn(form.elements.password.value);
+      await api.signIn(form.elements.email.value, form.elements.password.value);
       $('[data-login-error]').hidden = true;
       await start();
     } catch (err) {
@@ -196,7 +203,7 @@ function bind() {
     switch (t.dataset.action) {
       case 'sync': sync(); break;
       case 'cancel-sync': state.cancelSync = true; break;
-      case 'logout': await api.signOut().catch(() => {}); showLogin(); break;
+      case 'logout': await api.signOut(); showLogin(); break;
     }
   });
 
@@ -208,7 +215,7 @@ function bind() {
     const btn = form.querySelector('button');
     btn.disabled = true;
     try {
-      const { account } = await api.link(form.elements.riotId.value, form.elements.platform.value);
+      const { account } = await api.riot({ action: 'link', riotId: form.elements.riotId.value, platform: form.elements.platform.value });
       form.elements.riotId.value = '';
       await reload();
       toast(account.already_linked ? 'Kontot var redan kopplat' : `${account.game_name}#${account.tag_line} kopplat – hämtar historiken`);
@@ -224,17 +231,21 @@ function bind() {
 
 async function start() {
   try {
-    const session = await api.session();
-    state.passwordRequired = session.passwordRequired;
-    if (!session.loggedIn) { showLogin(); return; }
+    if (!(await api.isMember())) { show('denied'); return; }
+    state.profile = await api.profile();
     show('app');
     await reload();
-    loadChampions().then((c) => { state.champs = c; render(); });
+    loadChampions({ base: cfg.DDRAGON_URL || undefined }).then((c) => { state.champs = c; render(); });
   } catch (err) {
-    show('app');
     fail(err);
   }
 }
 
+try {
+  api = createApi({ url: cfg.SUPABASE_URL, key: cfg.SUPABASE_KEY || cfg.SUPABASE_ANON_KEY });
+} catch (err) {
+  document.body.innerHTML = `<p style="padding:24px">${err.message}</p>`;
+  throw err;
+}
 bind();
-start();
+if (api.isLoggedIn()) start(); else showLogin();
