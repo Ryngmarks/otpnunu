@@ -38,3 +38,7 @@ $PSQL -d "$DB" -Atc "select 'GANKTESTER GODKÄNDA' from information_schema.colum
 PGOPTIONS='-c client_min_messages=warning' $PSQL -d "$DB" -f ../006_early.sql
 PGOPTIONS='-c client_min_messages=warning' $PSQL -d "$DB" -f ../006_early.sql
 $PSQL -d "$DB" -Atc "select 'EARLY-TESTER GODKÄNDA' where (select count(*) from information_schema.columns where table_schema = 'nunu' and table_name = 'account_match' and column_name in ('early', 'allies', 'enemies', 'enemy_ap_share')) = 4"
+# Rank-historik: två gånger (ska gå att köra om)
+PGOPTIONS='-c client_min_messages=warning' $PSQL -d "$DB" -f ../007_rank.sql
+PGOPTIONS='-c client_min_messages=warning' $PSQL -d "$DB" -f ../007_rank.sql
+$PSQL -d "$DB" -f 007_rank_test.sql 2>&1 | sed -n 's/^psql:[^ ]* \(NOTICE\|ERROR\):  //p; /GODKÄNDA/p'

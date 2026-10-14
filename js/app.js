@@ -3,13 +3,15 @@
  */
 import { createApi, ApiError } from './core/api.js';
 import { loadChampions } from './core/ddragon.js';
-import { NUNU, QUEUE_FILTERS, filterMatches, summarize, recentForm, byAccount, opponents, masterySummary, careerSummary, damageReport, gankReport, earlyReport, synergyReport, matchupReport, impactReport } from './career/stats.js';
-import { esc, heroHtml, tilesHtml, formHtml, accountsHtml, opponentsHtml, matchesHtml, careerHtml, damageHtml, gankHtml, earlyHtml, synergyHtml, matchupHtml, impactHtml } from './career/view.js';
+import { NUNU, QUEUE_FILTERS, filterMatches, summarize, recentForm, byAccount, opponents, masterySummary, careerSummary, damageReport, gankReport, earlyReport, synergyReport, matchupReport, impactReport, eloSeries, overviewKpis, insights } from './career/stats.js';
+import { esc, heroHtml, tilesHtml, formHtml, accountsHtml, opponentsHtml, matchesHtml, careerHtml, damageHtml, gankHtml, earlyHtml, synergyHtml, matchupHtml, impactHtml, eloHtml, kpisHtml, insightsHtml, goldLineHtml } from './career/view.js';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 const cfg = window.APP_CONFIG || {};
 const FILTER_KEY = 'nunu-filters';
+const TAB_KEY = 'nunu-tab';
+const TABS = ['oversikt', 'early', 'ganks', 'matchups', 'matcher', 'karriar'];
 const PAGE = 20;
 
 const state = {
@@ -19,6 +21,8 @@ const state = {
   mastery: [],
   history: [],
   deaths: [],
+  ranks: [],
+  tab: 'oversikt',
   champs: { name: (id) => `#${id}`, icon: () => null, tags: () => [] },
   filters: { champion: 'nunu', queue: 'rift', account: '' },
   limit: PAGE,
@@ -26,6 +30,7 @@ const state = {
   cancelSync: false,
 };
 try { Object.assign(state.filters, JSON.parse(localStorage.getItem(FILTER_KEY))); } catch (e) { /* ignorera */ }
+try { const t = localStorage.getItem(TAB_KEY); if (TABS.includes(t)) state.tab = t; } catch (e) { /* ignorera */ }
 
 let api;
 
@@ -87,6 +92,19 @@ function render() {
   $('[data-tiles]').innerHTML = tilesHtml(summarize(rows));
   $('[data-form]').innerHTML = formHtml(recentForm(rows));
   $('[data-matches]').innerHTML = matchesHtml(rows, state.champs, state.accounts, state.limit);
+
+  // Översikt
+  $('[data-kpis]').innerHTML = kpisHtml(overviewKpis(rows));
+  $('[data-insights]').innerHTML = insightsHtml(insights(rows), state.champs);
+  $('[data-elo]').innerHTML = eloHtml(eloSeries(state.ranks, state.accounts));
+  const goldLine = goldLineHtml(earlyReport(rows));
+  $('[data-goldline]').innerHTML = goldLine;
+  $('[data-goldline-card]').hidden = !goldLine;
+  $('[data-recent]').innerHTML = matchesHtml(rows, state.champs, state.accounts, 5).replace(/<button[^>]*data-more[^>]*>[\s\S]*?<\/button>/, '');
+
+  // Flikar
+  $$('[data-tabs] [data-tab]').forEach((b) => b.setAttribute('aria-current', b.dataset.tab === state.tab ? 'page' : 'false'));
+  $$('[data-panel]').forEach((p) => { p.hidden = p.dataset.panel !== state.tab; });
   $('[data-opponents]').innerHTML = opponentsHtml(opponents(rows), state.champs);
   $('[data-accounts]').innerHTML = accountsHtml(byAccount(accountRows, state.accounts), state.mastery);
   const career = careerHtml(careerSummary(state.history, filterMatches(state.matches, { champion }), { champion }));
@@ -119,12 +137,13 @@ function render() {
 }
 
 async function reload() {
-  const [accounts, matches, mastery, history, deaths] = await Promise.all([
+  const [accounts, matches, mastery, history, deaths, ranks] = await Promise.all([
     api.accounts(), api.matches(), api.mastery(),
     api.seasonHistory().catch(() => []),  // 002_season_history.sql är valfri
     api.deaths().catch(() => []),         // 003_timelines.sql är valfri
+    api.ranks().catch(() => []),          // 007_rank.sql är valfri
   ]);
-  Object.assign(state, { accounts, matches, mastery, history, deaths });
+  Object.assign(state, { accounts, matches, mastery, history, deaths, ranks });
   if (state.filters.account && !accounts.some((a) => a.puuid === state.filters.account)) state.filters.account = '';
   render();
 }
@@ -202,8 +221,15 @@ function bind() {
   });
 
   document.addEventListener('click', async (e) => {
-    const t = e.target.closest('[data-action],[data-champion],[data-queue],[data-unlink],[data-more]');
+    const t = e.target.closest('[data-action],[data-champion],[data-queue],[data-unlink],[data-more],[data-tab]');
     if (!t) return;
+    if (t.dataset.tab) {
+      state.tab = t.dataset.tab;
+      try { localStorage.setItem(TAB_KEY, state.tab); } catch (err) { /* ignorera */ }
+      render();
+      $('[data-tabs]').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      return;
+    }
     if (t.dataset.champion) { state.filters.champion = t.dataset.champion; return saveFilters(); }
     if (t.dataset.queue) { state.filters.queue = t.dataset.queue; return saveFilters(); }
     if (t.hasAttribute('data-more')) { state.limit += PAGE; return render(); }

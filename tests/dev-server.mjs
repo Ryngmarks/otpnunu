@@ -162,6 +162,13 @@ export function createFakeRiot({ rateLimit = { count: 100, windowMs: 6000 } } = 
     }
     if ((m = p.match(/\/matches\/(EUW1_\d+)\/timeline$/))) return matches.has(m[1]) ? json(200, buildTimeline(matches.get(m[1]))) : json(404, {});
     if ((m = p.match(/\/matches\/(EUW1_\d+)$/))) return matches.has(m[1]) ? json(200, matches.get(m[1])) : json(404, {});
+    if (p.includes('/lol/league/v4/entries/by-puuid/')) {
+      const a = Object.values(accounts).find((x) => p.includes(x.puuid));
+      return json(200, a.riotId.startsWith('Rymm3n')
+        ? [{ queueType: 'RANKED_SOLO_5x5', tier: 'EMERALD', rank: 'II', leaguePoints: 64, wins: 131, losses: 118 },
+          { queueType: 'RANKED_FLEX_SR', tier: 'PLATINUM', rank: 'I', leaguePoints: 22, wins: 41, losses: 30 }]
+        : [{ queueType: 'RANKED_SOLO_5x5', tier: 'PLATINUM', rank: 'III', leaguePoints: 51, wins: 22, losses: 19 }]);
+    }
     if (p.includes('champion-masteries/by-puuid/')) {
       const a = Object.values(accounts).find((x) => p.includes(x.puuid));
       return json(200, [
@@ -181,7 +188,13 @@ export function createStore() {
     'johan@nik.se': { id: 'aaaaaaaa-0000-0000-0000-000000000001', password: 'nunu123' },
     'anna@nik.se': { id: 'bbbbbbbb-0000-0000-0000-000000000002', password: 'nunu123' },
   };
-  const t = { member: [{ user_id: users['johan@nik.se'].id }], profile: [], riot_account: [], raw_match: new Map(), account_match: [], mastery: [], death: [], storage: new Map() };
+  const t = { member: [{ user_id: users['johan@nik.se'].id }], profile: [], riot_account: [], raw_match: new Map(), account_match: [], mastery: [], death: [], storage: new Map(), rank_snapshot: [] };
+  // Påhittad rank-historik för Rymm3n (30 dagar), så att elo-grafen syns i dev
+  const RP = 'p'.repeat(70) + 'rymm3n01';
+  const climb = [[2160, 0], [2195, 2], [2230, 4], [2190, 6], [2250, 8], [2290, 11], [2270, 13], [2330, 16], [2310, 19], [2360, 22], [2405, 25], [2364, 28]];
+  const fromScore = (v) => ({ tier: ['IRON', 'BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'EMERALD', 'DIAMOND'][Math.floor(v / 400)], division: ['IV', 'III', 'II', 'I'][Math.floor((v % 400) / 100)], lp: v % 100 });
+  climb.forEach(([v, d], i) => t.rank_snapshot.push({ puuid: RP, queue: 'RANKED_SOLO_5x5', ...fromScore(v), wins: 110 + i * 2, losses: 100 + i, taken_at: new Date(Date.UTC(2026, 8, 14) + d * 86400000).toISOString() }));
+  [[1880, 3], [1905, 12], [1930, 20], [1922, 27]].forEach(([v, d], i) => t.rank_snapshot.push({ puuid: RP, queue: 'RANKED_FLEX_SR', ...fromScore(v), wins: 35 + i * 2, losses: 27 + i, taken_at: new Date(Date.UTC(2026, 8, 14) + d * 86400000).toISOString() }));
   // Äldre säsonger (002_season_history.sql) – här kopplade direkt till användaren
   t.season_history = [
     ['S2022', 20, 833, 451, 9.0, 5.3, 12.3], ['S2022', 35, 47, 19, 9.0, 5.9, 7.4],
@@ -209,6 +222,12 @@ export function createStore() {
     knownMatchIds: async (puuid) => new Set(t.account_match.filter((r) => r.puuid === puuid).map((r) => r.match_id)),
     staleMatchIds: async (puuid, version) => t.account_match.filter((r) => r.puuid === puuid && r.derived_version < version).map((r) => r.match_id),
     getTimeline: async (id) => t.storage.get(id) || null,
+    lastRanks: async (puuid) => {
+      const last = {};
+      for (const r of [...t.rank_snapshot].reverse()) if (r.puuid === puuid && !last[r.queue]) last[r.queue] = r;
+      return last;
+    },
+    insertRankSnapshots: async (rows) => rows.forEach((r) => t.rank_snapshot.push({ ...r, taken_at: new Date().toISOString() })),
     storeTimeline: async (id, tl) => { t.storage.set(id, tl); },
     replaceDeaths: async (ids, puuid, rows) => {
       t.death = t.death.filter((d) => !(d.puuid === puuid && ids.includes(d.match_id))).concat(rows);
@@ -235,6 +254,7 @@ export function createStore() {
     account_match: (uid) => t.account_match.filter((r) => ownPuuids(uid).includes(r.puuid)),
     mastery: (uid) => t.mastery.filter((r) => ownPuuids(uid).includes(r.puuid)),
     death: (uid) => t.death.filter((r) => ownPuuids(uid).includes(r.puuid)),
+    rank_snapshot: (uid) => t.rank_snapshot.filter((r) => ownPuuids(uid).includes(r.puuid)),
     season_history: (uid) => t.season_history.filter((r) => r.user_id === uid),
   };
 
@@ -343,6 +363,7 @@ export function createDevServer({ port = 8787, riot = createFakeRiot(), store = 
           store.t.account_match = store.t.account_match.filter((r) => r.puuid !== puuid);
           store.t.mastery = store.t.mastery.filter((r) => r.puuid !== puuid);
           store.t.death = store.t.death.filter((r) => r.puuid !== puuid);
+          store.t.rank_snapshot = store.t.rank_snapshot.filter((r) => r.puuid !== puuid);
         }
         return send(res, 204);
       }

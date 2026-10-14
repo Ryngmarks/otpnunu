@@ -200,8 +200,8 @@ test('sync: annat konto i samma matcher – rådata och tidslinjer återanvänds
 test('sync: Riot ber oss vänta – det som hämtats sparas och synken fortsätter sen', async () => {
   const db = memoryDb();
   await linkAccount({ riot: riotWith(fakeRiot({ history: { [P1]: 30 } })), db, userId: 'user-1', riotId: 'Rymm3n#EUW' });
-  // konto, mastery, 1 sida id:n, sedan nyast först: 30 (ARAM), 29+tl, 28+tl, 27+tl, 26+tl, 25 (ARAM) = 13 anrop, sedan 429
-  const limited = riotWith(fakeRiot({ history: { [P1]: 30 }, rateLimitAfter: 13 }));
+  // konto, mastery, rank, 1 sida id:n, sedan nyast först: 30 (ARAM), 29+tl, 28+tl, 27+tl, 26+tl, 25 (ARAM) = 14 anrop, sedan 429
+  const limited = riotWith(fakeRiot({ history: { [P1]: 30 }, rateLimitAfter: 14 }));
   const r = await syncAccount({ riot: limited, db, account: acc(db) });
   assert.equal(r.retryAfter, 120);
   assert.equal(r.done, false);
@@ -456,4 +456,27 @@ test('safeEqual', async () => {
   assert.equal(safeEqual('abc', 'abd'), false);
   assert.equal(safeEqual('abc', 'abcd'), false);
   assert.equal(safeEqual('', ''), true);
+});
+
+test('rank: Solo/Duo och Flex sparas, bara när något ändrats; utan åtkomst hoppas det över', async () => {
+  const { deriveRanks, rankChanged } = await import('../../functions/nunu-riot/derive.mjs');
+  const rows = deriveRanks([
+    { queueType: 'RANKED_SOLO_5x5', tier: 'MASTER', leaguePoints: 120, wins: 200, losses: 180 },
+    { queueType: 'CHERRY', tier: 'GOLD', rank: 'I' },
+  ], P1);
+  assert.deepEqual(rows, [{ puuid: P1, queue: 'RANKED_SOLO_5x5', tier: 'MASTER', division: null, lp: 120, wins: 200, losses: 180 }]);
+  assert.equal(rankChanged(null, rows[0]), true);
+  assert.equal(rankChanged({ ...rows[0] }, rows[0]), false);
+  assert.equal(rankChanged({ ...rows[0], lp: 100 }, rows[0]), true);
+
+  const db = memoryDb();
+  await linkAccount({ riot: riotWith(fakeRiot()), db, userId: 'user-1', riotId: 'Rymm3n#EUW' });
+  await syncAccount({ riot: riotWith(fakeRiot({ history: { [P1]: 3 } })), db, account: acc(db) });
+  assert.deepEqual(db.t.rank_snapshot.map((r) => [r.queue, r.tier, r.division, r.lp]), [['RANKED_SOLO_5x5', 'EMERALD', 'II', 45], ['RANKED_FLEX_SR', 'PLATINUM', 'I', 80]]);
+  await syncAccount({ riot: riotWith(fakeRiot({ history: { [P1]: 3 } })), db, account: acc(db) });
+  assert.equal(db.t.rank_snapshot.length, 2, 'oförändrad rank sparas inte igen');
+  await syncAccount({ riot: riotWith(fakeRiot({ history: { [P1]: 3 }, ranks: [{ queueType: 'RANKED_SOLO_5x5', tier: 'EMERALD', rank: 'I', leaguePoints: 3, wins: 121, losses: 101 }] })), db, account: acc(db) });
+  assert.equal(db.t.rank_snapshot.length, 3);
+  const r = await syncAccount({ riot: riotWith(fakeRiot({ history: { [P1]: 3 }, leagueStatus: 403 })), db, account: acc(db) });
+  assert.equal(r.done, true, 'utan åtkomst till league-v4 fortsätter synken');
 });

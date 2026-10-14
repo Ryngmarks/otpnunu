@@ -236,3 +236,64 @@ test('modul 2–5: early game, synergier, matchups och tidigt → vinst', async 
   assert.equal(s.earlyReport([{ win: true, early: null }]), null);
   assert.equal(v.earlyHtml(null), '');
 });
+
+test('elo: rank som tal, serier per konto och kö, y-axel', async () => {
+  const s = await import('../js/career/stats.js');
+  const v = await import('../js/career/view.js');
+  assert.equal(s.rankScore({ tier: 'IRON', division: 'IV', lp: 0 }), 0);
+  assert.equal(s.rankScore({ tier: 'EMERALD', division: 'II', lp: 45 }), 2245);
+  assert.equal(s.rankScore({ tier: 'MASTER', division: null, lp: 120 }), 2920);
+  assert.equal(s.rankScore({ tier: 'OKÄND' }), null);
+  assert.equal(s.rankLabel({ tier: 'EMERALD', division: 'II', lp: 45 }), 'Emerald II · 45 LP');
+  assert.equal(s.rankLabel({ tier: 'MASTER', division: null, lp: 120 }), 'Master · 120 LP');
+
+  const accounts = [{ puuid: 'a', game_name: 'Rymm3n', tag_line: 'EUW' }, { puuid: 'b', game_name: 'Smurf', tag_line: 'EUW' }];
+  const snaps = [
+    { puuid: 'a', queue: 'RANKED_SOLO_5x5', tier: 'EMERALD', division: 'II', lp: 45, wins: 10, losses: 8, taken_at: '2026-10-02T10:00:00Z' },
+    { puuid: 'a', queue: 'RANKED_SOLO_5x5', tier: 'EMERALD', division: 'III', lp: 90, wins: 9, losses: 8, taken_at: '2026-10-01T10:00:00Z' },
+    { puuid: 'a', queue: 'RANKED_FLEX_SR', tier: 'GOLD', division: 'I', lp: 10, wins: 3, losses: 1, taken_at: '2026-10-01T10:00:00Z' },
+    { puuid: 'b', queue: 'RANKED_SOLO_5x5', tier: 'PLATINUM', division: 'IV', lp: 0, wins: 1, losses: 1, taken_at: '2026-10-01T10:00:00Z' },
+  ];
+  const series = s.eloSeries(snaps, accounts);
+  assert.deepEqual(series.map((x) => [x.account, x.queueLabel]), [['Rymm3n#EUW', 'Solo/Duo'], ['Rymm3n#EUW', 'Flex'], ['Smurf#EUW', 'Solo/Duo']]);
+  assert.deepEqual([series[0].current, series[0].change, series[0].winrate, series[0].points.length], ['Emerald II · 45 LP', 55, 56, 2]);
+  assert.deepEqual(s.eloTicks(2150, 2300).map((t) => t.label), ['Emer II', 'Emer I'], '2 200 = Emerald II 0 LP');
+  assert.deepEqual(s.eloTicks(1500, 2500).map((t) => t.label), ['Platinum', 'Emerald', 'Diamond']);
+
+  const html = v.eloHtml(series);
+  assert.equal((html.match(/<polyline/g) || []).length, 3);
+  assert.match(html, /stroke-dasharray/, 'Flex streckad');
+  assert.match(html, /\+55 LP/);
+  assert.match(v.eloHtml([]), /Rank sparas/);
+});
+
+test('översikt: nyckeltal, insikter och guldgraf', async () => {
+  const s = await import('../js/career/stats.js');
+  const v = await import('../js/career/view.js');
+  const early = (g10, o10, d10) => ({ me: { 10: { gold: g10, xp: 4000, level: 7, cs: 60, k: 1, d: d10, a: 1 } }, opp: { 10: { gold: o10, xp: 3800, level: 7, cs: 55 } }, firstBlood: null });
+  const rows = [];
+  for (let i = 0; i < 30; i++) { // 20 vinster, 10 förluster – minst 10 matcher per grupp för en insikt
+    const win = i % 3 !== 0;
+    rows.push({
+      win, kills: 6, deaths: 3, assists: 9, damage: 18000, duration_s: 1800,
+      early: early(win ? 4500 : 3000, 3600, win ? 0 : 2),
+      ganks: [{ t: 200000, lane: 'bot', takedowns: 1, kills: 1, died: !win, vsJungler: false, victims: [] }],
+      allies: [22], enemies: [win ? 64 : 104], enemy_ap_share: 30,
+    });
+  }
+  const k = s.overviewKpis(rows);
+  assert.deepEqual([k.winrate, k.wins, k.losses, k.gankSuccess, k.goldDiff10], [67, 20, 10, 67, 400]);
+  const ins = s.insights(rows);
+  assert.equal(ins[0].tone, 'up');
+  assert.match(ins[0].text, /100 % vinst/);
+  assert.equal(ins[1].tone, 'down');
+  assert.match(ins[1].text, /0 % vinst/);
+  assert.match(ins[2].text, /\{104\}/, 'champion-id byts mot namn i vyn');
+  const html = v.insightsHtml(ins, { name: (id) => `<${id}>` });
+  assert.match(html, /&lt;104&gt;/);
+  assert.match(v.kpisHtml(k), /67 %/);
+  const gl = v.goldLineHtml(s.earlyReport(rows));
+  assert.equal((gl.match(/<polyline/g) || []).length, 2);
+  assert.doesNotMatch(gl, /NaN|undefined/);
+  assert.deepEqual(s.insights([]), []);
+});

@@ -62,7 +62,7 @@ export function timelineJson(n) {
   };
 }
 
-export function fakeRiot({ history = { [P1]: 250, [P2]: 0, [PX]: 250 }, rateLimitAfter = Infinity } = {}) {
+export function fakeRiot({ history = { [P1]: 250, [P2]: 0, [PX]: 250 }, rateLimitAfter = Infinity, ranks = null, leagueStatus = 200 } = {}) {
   const calls = { total: 0, matches: 0, timelines: 0, idPages: 0 };
   const res = (status, body, headers = {}) => new Response(JSON.stringify(body), { status, headers });
   const accounts = { 'Rymm3n#EUW': P1, 'Smurf#EUW': P2, 'Annan#EUW': PX };
@@ -98,6 +98,14 @@ export function fakeRiot({ history = { [P1]: 250, [P2]: 0, [PX]: 250 }, rateLimi
     if ((m = p.match(/\/matches\/(EUW1_\d+)$/))) {
       calls.matches++;
       return res(200, matchJson(Number(m[1].split('_')[1])));
+    }
+    if (p.includes('/lol/league/v4/entries/by-puuid/')) {
+      if (leagueStatus !== 200) return res(leagueStatus, {});
+      return res(200, ranks || [
+        { queueType: 'RANKED_SOLO_5x5', tier: 'EMERALD', rank: 'II', leaguePoints: 45, wins: 120, losses: 101 },
+        { queueType: 'RANKED_FLEX_SR', tier: 'PLATINUM', rank: 'I', leaguePoints: 80, wins: 30, losses: 22 },
+        { queueType: 'CHERRY', tier: 'GOLD', rank: 'I', leaguePoints: 0, wins: 1, losses: 1 },
+      ]);
     }
     if (p.includes('champion-masteries/by-puuid/')) {
       return res(200, [{ championId: 20, championLevel: 178, championPoints: 1930343, lastPlayTime: 1.76e12 }, { championId: 64, championLevel: 5, championPoints: 20000 }]);

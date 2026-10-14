@@ -65,7 +65,9 @@ export function createRiot({
       }
       if (res.status === 404 && allow404) return null;
       if (res.status === 401 || res.status === 403) {
-        throw new HttpError(502, 'Riot-nyckeln är ogiltig eller har gått ut');
+        const err = new HttpError(502, 'Riot-nyckeln är ogiltig eller har gått ut');
+        err.riotStatus = res.status;  // 403 kan också betyda att nyckeln saknar åtkomst till just det API:t
+        throw err;
       }
       if (!res.ok) {
         const err = new HttpError(502, `Riot svarade ${res.status}`);
@@ -100,6 +102,10 @@ export function createRiot({
 
     timeline: (region, matchId) =>
       get(`${regional(region)}/lol/match/v5/matches/${enc(matchId)}/timeline`, { allow404: true }),
+
+    /** Nuvarande rank per kö (league-v4). Riot har ingen historik – synken sparar ögonblicksbilder. */
+    leagueEntries: (platform, puuid) =>
+      get(`${platformUrl(platform)}/lol/league/v4/entries/by-puuid/${enc(puuid)}`),
 
     masteries: (platform, puuid) =>
       get(`${platformUrl(platform)}/lol/champion-mastery/v4/champion-masteries/by-puuid/${enc(puuid)}`),

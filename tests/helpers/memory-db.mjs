@@ -6,7 +6,7 @@
 export function memoryDb({ members = ['user-1', 'user-2'] } = {}) {
   const t = {
     profile: [], riot_account: [], raw_match: new Map(), account_match: new Map(),
-    death: [], mastery: new Map(), storage: new Map(),
+    death: [], mastery: new Map(), storage: new Map(), rank_snapshot: [],
   };
   const check = (ok, msg) => { if (!ok) throw new Error(`Främmande nyckel: ${msg}`); };
   let n = 0;
@@ -39,6 +39,7 @@ export function memoryDb({ members = ['user-1', 'user-2'] } = {}) {
         t.mastery.set(`${newPuuid}|${r.champion_id}`, { ...r, puuid: newPuuid });
       }
       t.death.forEach((d) => { if (d.puuid === oldPuuid) d.puuid = newPuuid; });
+      t.rank_snapshot.forEach((d) => { if (d.puuid === oldPuuid) d.puuid = newPuuid; });
     },
     updateAccount: async (puuid, fields) => { Object.assign(t.riot_account.find((a) => a.puuid === puuid) || {}, fields); },
     knownMatchIds: async (puuid) => new Set([...t.account_match.values()].filter((r) => r.puuid === puuid).map((r) => r.match_id)),
@@ -59,6 +60,12 @@ export function memoryDb({ members = ['user-1', 'user-2'] } = {}) {
       t.death.push(...rows);
     },
     upsertMastery: async (rows) => rows.forEach((r) => t.mastery.set(`${r.puuid}|${r.champion_id}`, r)),
+    lastRanks: async (puuid) => {
+      const last = {};
+      for (const r of [...t.rank_snapshot].reverse()) if (r.puuid === puuid && !last[r.queue]) last[r.queue] = r;
+      return last;
+    },
+    insertRankSnapshots: async (rows) => rows.forEach((r) => t.rank_snapshot.push({ ...r, taken_at: new Date().toISOString() })),
     getTimeline: async (matchId) => (t.storage.has(matchId) ? structuredClone(t.storage.get(matchId)) : null),
     storeTimeline: async (matchId, timeline) => { t.storage.set(matchId, structuredClone(timeline)); },
   };

@@ -422,3 +422,119 @@ export function impactReport(rows) {
     ],
   };
 }
+
+/* ---------------- Elo (rank-historik, nunu.rank_snapshot) ---------------- */
+
+export const TIERS = ['IRON', 'BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'EMERALD', 'DIAMOND', 'MASTER', 'GRANDMASTER', 'CHALLENGER'];
+const DIVISIONS = { IV: 0, III: 1, II: 2, I: 3 };
+export const RANK_QUEUES = { RANKED_SOLO_5x5: 'Solo/Duo', RANKED_FLEX_SR: 'Flex' };
+const cap = (s) => s.charAt(0) + s.slice(1).toLowerCase();
+
+/** Rank som ett tal: 100 per division (Iron IV 0 LP = 0), Master och uppåt fortsätter med LP från 2 800. */
+export function rankScore(r) {
+  const tier = TIERS.indexOf(r.tier);
+  if (tier < 0) return null;
+  if (tier >= 7) return 2800 + (r.lp || 0);
+  return tier * 400 + (DIVISIONS[r.division] ?? 0) * 100 + Math.min(100, r.lp || 0);
+}
+
+/** "Emerald II · 45 LP" */
+export const rankLabel = (r) => `${cap(r.tier)}${r.division && TIERS.indexOf(r.tier) < 7 ? ` ${r.division}` : ''} · ${r.lp} LP`;
+
+/** En serie per konto och kö, äldst först, med senaste rank och vinst/förlust. */
+export function eloSeries(snapshots, accounts) {
+  const byKey = new Map();
+  for (const s of [...snapshots].sort((a, b) => String(a.taken_at).localeCompare(String(b.taken_at)))) {
+    const score = rankScore(s);
+    if (score == null || !RANK_QUEUES[s.queue]) continue;
+    const key = `${s.puuid}|${s.queue}`;
+    if (!byKey.has(key)) byKey.set(key, { puuid: s.puuid, queue: s.queue, points: [] });
+    byKey.get(key).points.push({ t: new Date(s.taken_at).getTime(), score, label: rankLabel(s), snap: s });
+  }
+  return [...byKey.values()]
+    .map((sr) => {
+      const accountIndex = Math.max(0, accounts.findIndex((a) => a.puuid === sr.puuid));
+      const a = accounts[accountIndex];
+      const now = sr.points[sr.points.length - 1].snap;
+      const first = sr.points[0];
+      return {
+        ...sr,
+        accountIndex,
+        account: a ? `${a.game_name}#${a.tag_line}` : '?',
+        queueLabel: RANK_QUEUES[sr.queue],
+        current: rankLabel(now),
+        wins: now.wins,
+        losses: now.losses,
+        winrate: pct(now.wins, now.wins + now.losses),
+        change: sr.points[sr.points.length - 1].score - first.score,
+      };
+    })
+    .sort((a, b) => a.accountIndex - b.accountIndex || (a.queue === 'RANKED_SOLO_5x5' ? 0 : 1) - (b.queue === 'RANKED_SOLO_5x5' ? 0 : 1));
+}
+
+/** Y-axelns linjer: tier-gränser, eller divisioner om spannet är litet. */
+export function eloTicks(min, max) {
+  const ticks = [];
+  const step = max - min > 700 ? 400 : 100;
+  for (let v = Math.ceil(min / step) * step; v <= max; v += step) {
+    if (v > 2800) continue;
+    const tier = Math.min(7, Math.floor(v / 400));
+    const div = Object.keys(DIVISIONS).find((k) => DIVISIONS[k] === Math.floor((v % 400) / 100));
+    ticks.push({ value: v, label: tier >= 7 ? 'Master' : step === 400 ? cap(TIERS[tier]) : `${cap(TIERS[tier]).slice(0, 4)} ${div}` });
+  }
+  return ticks;
+}
+
+/* ---------------- Översikt: nyckeltal och insikter ---------------- */
+
+/** Fyra nyckeltal överst: vinst, KDA, lyckade ganks och guld mot jungler vid 10 min. */
+export function overviewKpis(rows) {
+  const s = summarize(rows);
+  const recent = summarize(rows.slice(0, 30));
+  const g = gankReport(rows);
+  const e = earlyReport(rows);
+  const m10 = e && e.minutes.find((m) => m.minute === 10);
+  return {
+    winrate: s.winrate, wins: s.wins, losses: s.losses, recentWinrate: recent.games >= 10 ? recent.winrate : null,
+    kda: s.kda, k: s.kills, d: s.deaths, a: s.assists,
+    gankSuccess: g ? g.success : null, gankPerGame: g ? g.perGame : null,
+    goldDiff10: m10 ? m10.goldDiff : null,
+  };
+}
+
+/**
+ * Två–tre korta insikter i klartext ur rapporterna: den grupp som vinner mest och minst
+ * (minst minGames matcher), och svårast/bäst champion. Samband, inte orsak.
+ */
+export function insights(rows, { minGames = 10 } = {}) {
+  const out = [];
+  const base = summarize(rows).winrate;
+  if (base == null) return out;
+  const groups = [];
+  const imp = impactReport(rows);
+  if (imp) {
+    imp.goldDiff10.forEach((g) => groups.push({ ...g, text: `Guld vid 10 min: ${g.label.toLowerCase()}` }));
+    imp.deaths10.forEach((g) => groups.push({ ...g, text: `${g.label} före 10 min` }));
+    imp.firstBlood.forEach((g) => groups.push({ ...g, text: g.label }));
+  }
+  const gk = gankReport(rows);
+  if (gk) {
+    groups.push({ ...gk.first.lyckad, text: 'Lyckad första gank' });
+    groups.push({ ...gk.first.ingen, text: 'Ingen gank före 15:00' });
+  }
+  const ok = groups.filter((g) => g.games >= minGames && g.winrate != null);
+  const best = [...ok].sort((a, b) => b.winrate - a.winrate)[0];
+  const worst = [...ok].sort((a, b) => a.winrate - b.winrate)[0];
+  if (best && best.winrate > base) out.push({ tone: 'up', text: `${best.text} → ${best.winrate} % vinst (${best.games} matcher, mot ${base} % totalt).` });
+  if (worst && worst !== best && worst.winrate < base) out.push({ tone: 'down', text: `${worst.text} → ${worst.winrate} % vinst (${worst.games} matcher).` });
+  const syn = synergyReport(rows);
+  if (syn) {
+    const hard = syn.hardestEnemies[0];
+    const friend = syn.bestAllies[0];
+    const parts = [];
+    if (hard && hard.winrate < base) parts.push({ id: hard.championId, text: `Svårast mot {${hard.championId}} (${hard.winrate} %)` });
+    if (friend && friend.winrate > base) parts.push({ id: friend.championId, text: `bäst med {${friend.championId}} (${friend.winrate} %)` });
+    if (parts.length) out.push({ tone: 'info', text: `${parts.map((p) => p.text).join(', ')}.` });
+  }
+  return out;
+}

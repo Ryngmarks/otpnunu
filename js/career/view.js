@@ -2,7 +2,7 @@
  * otpnunu – rendering. Funktioner som tar data och returnerar HTML.
  * Allt som kommer utifrån (namn, Riot ID) escapas.
  */
-import { queueLabel } from './stats.js';
+import { queueLabel, eloTicks } from './stats.js';
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const num = (n) => (n == null ? '–' : Number(n).toLocaleString('sv-SE'));
@@ -328,4 +328,115 @@ export function impactHtml(rep) {
     <h3 class="sub">First blood</h3>
     ${barRows(rep.firstBlood)}
     <p class="card__hint card__hint--after">Visar samband, inte orsak – en tidig ledning kan också bero på draften.</p>`;
+}
+
+/* ---------------- Elo-graf ---------------- */
+
+
+/** Färg per konto (validerad för mörk bakgrund och färgblindhet); kön syns som hel/streckad linje. */
+export const ACCOUNT_COLORS = ['#5ec8f5', '#e8a33c', '#b98cff', '#5fd39a'];
+
+export function eloHtml(series) {
+  if (!series.length) {
+    return '<p class="empty">Rank sparas vid varje synk från och med nu – Riot har ingen rank-historik att hämta, så grafen fylls på med tiden.</p>';
+  }
+  const W = 640, H = 230, L = 64, R = 16, T = 14, B = 30;
+  const all = series.flatMap((s) => s.points);
+  let tMin = Math.min(...all.map((p) => p.t));
+  let tMax = Math.max(...all.map((p) => p.t));
+  if (tMax - tMin < 86400000) { tMin -= 43200000; tMax += 43200000; } // minst ett dygn brett
+  const sMin = Math.min(...all.map((p) => p.score)) - 60;
+  const sMax = Math.max(...all.map((p) => p.score)) + 60;
+  const x = (t) => L + ((t - tMin) / (tMax - tMin)) * (W - L - R);
+  const y = (v) => T + (1 - (v - sMin) / (sMax - sMin)) * (H - T - B);
+  const date = (t) => new Date(t).toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' });
+  const color = (s) => ACCOUNT_COLORS[s.accountIndex % ACCOUNT_COLORS.length];
+  const dash = (s) => (s.queue === 'RANKED_FLEX_SR' ? ' stroke-dasharray="6 5"' : '');
+  const latest = series.map((s) => s.points[s.points.length - 1]);
+  const summary = series.map((s, i) => `${s.account} ${s.queueLabel}: ${latest[i].label}`).join(', ');
+
+  return `
+    <svg class="elo" viewBox="0 0 ${W} ${H}" role="img" aria-label="Rank över tid. ${esc(summary)}">
+      ${eloTicks(sMin, sMax).map((tk) => `
+        <line class="elo__grid" x1="${L}" x2="${W - R}" y1="${y(tk.value)}" y2="${y(tk.value)}"></line>
+        <text class="elo__tick" x="${L - 8}" y="${y(tk.value) + 4}" text-anchor="end">${esc(tk.label)}</text>`).join('')}
+      <text class="elo__tick" x="${L}" y="${H - 8}">${esc(date(tMin))}</text>
+      <text class="elo__tick" x="${W - R}" y="${H - 8}" text-anchor="end">${esc(date(tMax))}</text>
+      ${series.map((s) => `
+        <polyline class="elo__line" points="${s.points.map((p) => `${x(p.t).toFixed(1)},${y(p.score).toFixed(1)}`).join(' ')}" stroke="${color(s)}"${dash(s)}></polyline>
+        ${s.points.map((p) => `<circle class="elo__dot" cx="${x(p.t).toFixed(1)}" cy="${y(p.score).toFixed(1)}" r="${s.points.length > 40 ? 2.5 : 4}" fill="${color(s)}"><title>${esc(`${s.account} · ${s.queueLabel} · ${date(p.t)}: ${p.label}`)}</title></circle>`).join('')}`).join('')}
+    </svg>
+    <ul class="elo__legend">${series.map((s) => `
+      <li>
+        <svg width="26" height="10" aria-hidden="true"><line x1="1" x2="25" y1="5" y2="5" stroke="${color(s)}" stroke-width="3"${dash(s)}></line></svg>
+        <span class="elo__who">${esc(s.account)} <small>${esc(s.queueLabel)}</small></span>
+        <b>${esc(s.current)}</b>
+        <span class="muted">${s.wins}V ${s.losses}F · ${s.winrate ?? '–'}%</span>
+        ${s.points.length > 1 ? `<span class="${s.change >= 0 ? 'pos' : 'neg'}">${s.change >= 0 ? '+' : '−'}${Math.abs(s.change)} LP</span>` : '<span class="muted">ny</span>'}
+      </li>`).join('')}</ul>`;
+}
+
+/* ---------------- Översikt ---------------- */
+
+export function kpisHtml(k) {
+  const tile = (label, value, sub, tone = '') => `
+    <div class="kpi ${tone}"><span class="kpi__label">${label}</span><b class="kpi__value">${value}</b><span class="kpi__sub">${sub}</span></div>`;
+  const toneOf = (v, good) => (v == null ? '' : good ? 'kpi--good' : 'kpi--bad');
+  return [
+    tile('Vinst', k.winrate == null ? '–' : `${k.winrate} %`, `${num(k.wins)}–${num(k.losses)}${k.recentWinrate != null ? ` · ${k.recentWinrate} % senaste 30` : ''}`, toneOf(k.winrate, k.winrate >= 50)),
+    tile('KDA', dash(k.kda), k.kda == null ? '–' : `${dash(k.k)} / ${dash(k.d)} / ${dash(k.a)}`),
+    tile('Lyckade ganks', k.gankSuccess == null ? '–' : `${k.gankSuccess} %`, k.gankPerGame == null ? 'när du spelar jungle' : `${dash(k.gankPerGame)} per match före 15:00`, toneOf(k.gankSuccess, k.gankSuccess >= 60)),
+    tile('Guld vid 10 min', signed(k.goldDiff10), 'mot motståndarens jungler', toneOf(k.goldDiff10, k.goldDiff10 >= 0)),
+  ].join('');
+}
+
+/** Insikter; {id} i texten byts mot champion-namnet. */
+export function insightsHtml(list, champs) {
+  const marks = { up: '↑', down: '↓', info: '→' };
+  return list.map((i) => `
+    <p class="insight insight--${i.tone}"><span class="insight__mark" aria-hidden="true">${marks[i.tone]}</span>
+      <span>${esc(i.text).replace(/\{(\d+)\}/g, (_, id) => esc(champs.name(Number(id))))}</span></p>`).join('');
+}
+
+/** Guld mot motståndarens jungler 0–15 min: en linje för vinster, en för förluster. */
+export function goldLineHtml(rep) {
+  if (!rep) return '';
+  const pts = (key) => [{ minute: 0, v: 0 }, ...rep.minutes.filter((m) => m[key] != null).map((m) => ({ minute: m.minute, v: m[key] }))];
+  const win = pts('goldDiffWin');
+  const loss = pts('goldDiffLoss');
+  if (win.length < 2 && loss.length < 2) return '';
+  const W = 560, H = 220, L = 52, R = 92, T = 12, B = 28;
+  const maxAbs = Math.max(500, ...[...win, ...loss].map((p) => Math.abs(p.v)));
+  const lim = Math.ceil(maxAbs / 500) * 500;
+  const x = (m) => L + (m / 15) * (W - L - R);
+  const y = (v) => T + (1 - (v + lim) / (2 * lim)) * (H - T - B);
+  const line = (list, cls) => `<polyline class="gl__line ${cls}" points="${list.map((p) => `${x(p.minute)},${y(p.v).toFixed(1)}`).join(' ')}"></polyline>
+    ${list.slice(1).map((p) => `<circle class="gl__dot ${cls}" cx="${x(p.minute)}" cy="${y(p.v).toFixed(1)}" r="4.5"><title>${p.minute} min: ${signed(p.v)} guld</title></circle>`).join('')}`;
+  // Etiketterna vid linjernas slut flyttas isär om linjerna slutar nära varandra
+  const yEnd = (list) => y(list[list.length - 1].v);
+  let yw = yEnd(win);
+  let yl = yEnd(loss);
+  if (Math.abs(yw - yl) < 34) {
+    const mid = (yw + yl) / 2;
+    const up = yw <= yl ? 'w' : 'l';
+    yw = up === 'w' ? mid - 17 : mid + 17;
+    yl = up === 'w' ? mid + 17 : mid - 17;
+  }
+  const end = (list, label, ly) => {
+    const p = list[list.length - 1];
+    return list.length > 1 ? `<text class="gl__end" x="${x(p.minute) + 10}" y="${ly - 2}">${label}</text><text class="gl__endv" x="${x(p.minute) + 10}" y="${ly + 13}">${esc(signed(p.v))}</text>` : '';
+  };
+  return `
+    <svg class="gl" viewBox="0 0 ${W} ${H}" role="img" aria-label="Guld mot motståndarens jungler: ${esc(signed(win[win.length - 1].v))} i vinster och ${esc(signed(loss[loss.length - 1].v))} i förluster vid ${win[win.length - 1].minute} min">
+      <line class="gl__axis" x1="${L}" x2="${W - R}" y1="${y(lim)}" y2="${y(lim)}"></line>
+      <line class="gl__axis" x1="${L}" x2="${W - R}" y1="${y(-lim)}" y2="${y(-lim)}"></line>
+      <line class="gl__zero" x1="${L}" x2="${W - R}" y1="${y(0)}" y2="${y(0)}"></line>
+      <text class="gl__tick" x="${L - 8}" y="${y(lim) + 4}" text-anchor="end">${esc(signed(lim))}</text>
+      <text class="gl__tick" x="${L - 8}" y="${y(0) + 4}" text-anchor="end">0</text>
+      <text class="gl__tick" x="${L - 8}" y="${y(-lim) + 4}" text-anchor="end">${esc(signed(-lim))}</text>
+      ${[0, 5, 10, 15].map((m) => `<text class="gl__tick" x="${x(m)}" y="${H - 6}" text-anchor="middle">${m} min</text>`).join('')}
+      ${line(win, 'is-win')}${line(loss, 'is-loss')}
+      ${end(win, 'Vinster', yw)}${end(loss, 'Förluster', yl)}
+    </svg>
+    <p class="legend"><span><i class="sw is-win"></i>Vinster</span><span><i class="sw is-loss"></i>Förluster</span><span>Streckad linje = lika mycket guld</span></p>`;
 }

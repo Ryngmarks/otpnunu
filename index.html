@@ -61,7 +61,10 @@
       </button>
     </header>
 
-    <section class="hero" data-hero></section>
+    <div class="top-row">
+      <section class="hero" data-hero></section>
+      <section class="kpis" data-kpis aria-label="Nyckeltal"></section>
+    </div>
 
     <section class="sync card" data-sync hidden>
       <div class="sync__text">
@@ -72,6 +75,15 @@
       <button class="link-btn" data-action="cancel-sync">Avbryt</button>
     </section>
 
+    <nav class="tabs" aria-label="Avsnitt" data-tabs>
+      <button type="button" data-tab="oversikt">Översikt</button>
+      <button type="button" data-tab="early">Early game</button>
+      <button type="button" data-tab="ganks">Ganks</button>
+      <button type="button" data-tab="matchups">Matchups</button>
+      <button type="button" data-tab="matcher">Matcher</button>
+      <button type="button" data-tab="karriar">Karriär</button>
+    </nav>
+
     <nav class="filters" aria-label="Filter">
       <div class="seg" data-filter-champion>
         <button data-champion="nunu">Nunu</button>
@@ -81,57 +93,28 @@
       <select class="select" data-filter-account aria-label="Konto"></select>
     </nav>
 
-    <section class="tiles" data-tiles></section>
-    <div class="form-strip" data-form></div>
-
-    <section class="card" data-early-card hidden>
-      <h2 class="card__title">Early game</h2>
-      <p class="card__hint">Vid 5, 10 och 15 min · med filtren ovan</p>
-      <div data-early></div>
-    </section>
-
-    <section class="card" data-impact-card hidden>
-      <h2 class="card__title">Tidigt spel och vinst</h2>
-      <p class="card__hint">Vinstprocent beroende på hur början av matchen gick</p>
-      <div data-impact></div>
-    </section>
-
-    <section class="card" data-gank-card hidden>
-      <h2 class="card__title">Ganks</h2>
-      <p class="card__hint">Före 15:00, när du spelar jungle · med filtren ovan</p>
-      <div data-ganks></div>
-    </section>
-
-    <section class="card" data-matchup-card hidden>
-      <h2 class="card__title">Matchups</h2>
-      <p class="card__hint">Mot motståndarens jungler och lagkomposition</p>
-      <div data-matchup></div>
-    </section>
-
-    <section class="card" data-synergy-card hidden>
-      <h2 class="card__title">Synergier</h2>
-      <div data-synergy></div>
-    </section>
-
-    <section class="card" data-damage-card hidden>
-      <h2 class="card__title">Skada och dödsfall</h2>
-      <p class="card__hint">Från tidslinjerna, med filtren ovan</p>
-      <div data-damage></div>
-    </section>
-
-    <section class="card" data-career-card hidden>
-      <h2 class="card__title">Hela karriären</h2>
-      <p class="card__hint">Äldre säsonger från OP.GG plus synkade matcher på Summoner's Rift, alla konton</p>
-      <div data-career></div>
-    </section>
-
-    <div class="columns">
-      <section class="card">
-        <h2 class="card__title">Matcher</h2>
-        <div data-matches></div>
-      </section>
-
-      <div class="side">
+    <!-- ============ ÖVERSIKT ============ -->
+    <div class="panel" data-panel="oversikt">
+      <section class="insights" data-insights></section>
+      <div class="grid2">
+        <section class="card">
+          <h2 class="card__title">Rank över tid</h2>
+          <p class="card__hint">Alla konton · Solo/Duo hel linje, Flex streckad</p>
+          <div data-elo></div>
+        </section>
+        <section class="card" data-goldline-card hidden>
+          <h2 class="card__title">Guld mot motståndarens jungler</h2>
+          <p class="card__hint">Snitt i vinster och förluster, 0–15 min · med filtren ovan</p>
+          <div data-goldline></div>
+        </section>
+      </div>
+      <div class="form-strip" data-form></div>
+      <div class="grid2">
+        <section class="card">
+          <h2 class="card__title">Senaste matcher</h2>
+          <div data-recent></div>
+          <button type="button" class="btn btn--ghost btn--block" data-tab="matcher">Visa alla matcher</button>
+        </section>
         <section class="card">
           <h2 class="card__title">Konton</h2>
           <div data-accounts></div>
@@ -150,6 +133,52 @@
             <button class="btn btn--ghost" type="submit">+ Koppla</button>
           </form>
         </section>
+      </div>
+    </div>
+
+    <!-- ============ EARLY GAME ============ -->
+    <div class="panel" data-panel="early" hidden>
+    <section class="card" data-early-card hidden>
+      <h2 class="card__title">Early game</h2>
+      <p class="card__hint">Vid 5, 10 och 15 min · med filtren ovan</p>
+      <div data-early></div>
+    </section>
+
+    <section class="card" data-impact-card hidden>
+      <h2 class="card__title">Tidigt spel och vinst</h2>
+      <p class="card__hint">Vinstprocent beroende på hur början av matchen gick</p>
+      <div data-impact></div>
+    </section>
+    </div>
+
+    <!-- ============ GANKS ============ -->
+    <div class="panel" data-panel="ganks" hidden>
+    <section class="card" data-gank-card hidden>
+      <h2 class="card__title">Ganks</h2>
+      <p class="card__hint">Före 15:00, när du spelar jungle · med filtren ovan</p>
+      <div data-ganks></div>
+    </section>
+
+    <section class="card" data-damage-card hidden>
+      <h2 class="card__title">Skada och dödsfall</h2>
+      <p class="card__hint">Från tidslinjerna, med filtren ovan</p>
+      <div data-damage></div>
+    </section>
+    </div>
+
+    <!-- ============ MATCHUPS ============ -->
+    <div class="panel" data-panel="matchups" hidden>
+    <section class="card" data-matchup-card hidden>
+      <h2 class="card__title">Matchups</h2>
+      <p class="card__hint">Mot motståndarens jungler och lagkomposition</p>
+      <div data-matchup></div>
+    </section>
+
+      <div class="grid2">
+        <section class="card" data-synergy-card hidden>
+      <h2 class="card__title">Synergier</h2>
+      <div data-synergy></div>
+    </section>
 
         <section class="card">
           <h2 class="card__title">Vanligaste motståndarna</h2>
@@ -157,6 +186,24 @@
           <div data-opponents></div>
         </section>
       </div>
+    </div>
+
+    <!-- ============ MATCHER ============ -->
+    <div class="panel" data-panel="matcher" hidden>
+      <section class="tiles" data-tiles></section>
+      <section class="card">
+        <h2 class="card__title">Matcher</h2>
+        <div data-matches></div>
+      </section>
+    </div>
+
+    <!-- ============ KARRIÄR ============ -->
+    <div class="panel" data-panel="karriar" hidden>
+    <section class="card" data-career-card hidden>
+      <h2 class="card__title">Hela karriären</h2>
+      <p class="card__hint">Äldre säsonger från OP.GG plus synkade matcher på Summoner's Rift, alla konton</p>
+      <div data-career></div>
+    </section>
     </div>
 
     <footer class="footer">

@@ -120,6 +120,15 @@ export function createDb({ url, serviceKey, fetchImpl = fetch }) {
     upsertAccountMatches: (rows) => upsert('account_match', rows, 'puuid,match_id'),
     upsertMastery: (rows) => upsert('mastery', rows, 'puuid,champion_id'),
 
+    /** Senaste sparade rank per kö för kontot: { RANKED_SOLO_5x5: {…}, … } */
+    async lastRanks(puuid) {
+      const rows = await call(`rank_snapshot?select=queue,tier,division,lp,wins,losses&puuid=eq.${enc(puuid)}&order=taken_at.desc&limit=50`);
+      const last = {};
+      for (const r of rows) if (!last[r.queue]) last[r.queue] = r;
+      return last;
+    },
+    insertRankSnapshots: (rows) => upsert('rank_snapshot', rows, 'puuid,queue,taken_at', true),
+
     /** Dödsfallen för de här matcherna ersätts helt (de räknas om tillsammans med matchen). */
     async replaceDeaths(matchIds, puuid, rows) {
       if (!matchIds.length) return;

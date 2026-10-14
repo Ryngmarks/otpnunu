@@ -138,6 +138,7 @@ export function createApi({ url, key, storage = window.localStorage, fetchImpl =
     matches: () => all('account_match?select=*&order=game_start.desc'),
     mastery: () => rest('mastery?select=puuid,champion_id,level,points,last_play_time'),
     seasonHistory: () => rest('season_history?select=season,champion_id,games,wins,kills,deaths,assists,ended'),
+    ranks: () => all('rank_snapshot?select=puuid,queue,tier,division,lp,wins,losses,taken_at&order=taken_at'),
     deaths: () => all('death?select=puuid,match_id,t_ms,killer_champion_id,helper_champion_ids,places&order=match_id'),
 
     /* ---- Edge Function ---- */

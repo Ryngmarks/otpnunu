@@ -115,6 +115,28 @@ export function rawMatchRow(match, region) {
   };
 }
 
+/** Rankade köer vi följer: Solo/Duo och Flex. */
+export const RANKED_QUEUES = ['RANKED_SOLO_5x5', 'RANKED_FLEX_SR'];
+
+/** Rader för nunu.rank_snapshot ur league-v4 (bara Solo/Duo och Flex). */
+export function deriveRanks(entries, puuid) {
+  return (entries || [])
+    .filter((e) => RANKED_QUEUES.includes(e.queueType))
+    .map((e) => ({
+      puuid,
+      queue: e.queueType,
+      tier: e.tier,
+      division: e.rank || null,  // saknas för Master och uppåt
+      lp: e.leaguePoints || 0,
+      wins: e.wins || 0,
+      losses: e.losses || 0,
+    }));
+}
+
+/** Har ranken ändrats sedan förra ögonblicksbilden? */
+export const rankChanged = (prev, next) => !prev
+  || ['tier', 'division', 'lp', 'wins', 'losses'].some((k) => (prev[k] ?? null) !== (next[k] ?? null));
+
 /** En rad för nunu.mastery från champion-mastery-v4. */
 export function deriveMastery(entry, puuid) {
   return {

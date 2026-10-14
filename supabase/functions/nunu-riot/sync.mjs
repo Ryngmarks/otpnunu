@@ -3,7 +3,7 @@
  * Får in riot (riot.mjs) och db (db.mjs) – testas med låtsasversioner.
  */
 import { HttpError, RateLimitError, parseRiotId, regionFor } from './riot.mjs';
-import { DERIVED_VERSION, RIFT_QUEUES, deriveAccountMatch, deriveDeaths, deriveMastery, rawMatchRow } from './derive.mjs';
+import { DERIVED_VERSION, RIFT_QUEUES, deriveAccountMatch, deriveDeaths, deriveMastery, deriveRanks, rankChanged, rawMatchRow } from './derive.mjs';
 
 export const BATCH_SIZE = 20;     // matcher per anrop: match + tidslinje = 2 Riot-anrop, och Edge Functions har begränsad CPU-tid
 const MAX_HISTORY = 2000;         // så långt bak vi letar efter match-id:n
@@ -92,6 +92,24 @@ async function currentAccount({ riot, db, account }) {
   return account;
 }
 
+/**
+ * Sparar kontots rank (Solo/Duo och Flex) om den ändrats sedan förra gången.
+ * Riot har ingen rank-historik, så grafen byggs av de här ögonblicksbilderna.
+ * Saknar nyckeln åtkomst till league-v4 hoppas det över – resten av synken fortsätter.
+ */
+async function syncRanks({ riot, db, account }) {
+  let entries;
+  try {
+    entries = await riot.leagueEntries(account.platform, account.puuid);
+  } catch (err) {
+    if (err.riotStatus === 403 || err.riotStatus === 404) return;
+    throw err;
+  }
+  const rows = deriveRanks(entries, account.puuid);
+  const last = await db.lastRanks(account.puuid);
+  await db.insertRankSnapshots(rows.filter((r) => rankChanged(last[r.queue], r)));
+}
+
 export async function syncAccount({ riot, db, account: given, batchSize = BATCH_SIZE, now = () => new Date() }) {
   const result = { puuid: given.puuid, imported: 0, remaining: 0, retryAfter: null, done: false };
   let account = given;
@@ -103,6 +121,7 @@ export async function syncAccount({ riot, db, account: given, batchSize = BATCH_
 
     const masteries = await riot.masteries(account.platform, account.puuid);
     await db.upsertMastery(masteries.map((m) => deriveMastery(m, account.puuid)));
+    await syncRanks({ riot, db, account });
 
     const known = await db.knownMatchIds(account.puuid);
     const missing = await findMissingIds({ riot, account, known });

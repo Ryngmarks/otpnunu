@@ -229,6 +229,7 @@ Dev-servern kör den riktiga webbsidan och den riktiga Edge Function-koden mot e
 - [ ] Kör `supabase/nunu/004_rekey.sql` (krävs för byte av Riot-nyckel, se nedan).
 - [ ] Kör `supabase/nunu/005_ganks.sql` (gank-analys, se `docs/nunu-early-game.md`).
 - [ ] Kör `supabase/nunu/006_early.sql` (early game, synergier, matchups).
+- [ ] Kör `supabase/nunu/007_rank.sql` (rank-historik / elo).
 - [ ] Skapa en Supabase access token (*Account → Access Tokens*) och lägg in den som GitHub-secret
       `SUPABASE_ACCESS_TOKEN` – eller välj manuell driftsättning.
 - [ ] Ansök om en **Personal API Key** hos Riot (*Register Product*). Utvecklingsnyckeln gäller bara
@@ -272,3 +273,10 @@ GitHub Actions (`nunu-sync.yml`) varje timme → `nunu-riot` med `{ action: 'syn
 `x-nunu-cron`, som jämförs med funktionens `NUNU_CRON_SECRET` (minst 32 tecken, jämförelse på konstant tid).
 Synkar alla konton, 20 matcher per konto och anrop, och anropar igen tills allt är klart (högst 30 varv).
 Synka-knappen på sidan finns kvar för den allra senaste matchen.
+
+## Rank (elo)
+
+Riot har ingen rank-historik i API:t – bara nuvarande rank (league-v4, Solo/Duo och Flex). Synken sparar
+en rad i `nunu.rank_snapshot` när ranken ändrats sedan förra synken, så grafen *Rank över tid* börjar vid
+första synken efter `007_rank.sql` och fylls på varje timme. Rank räknas om till ett tal (100 per division,
+Iron IV 0 LP = 0; Master och uppåt fortsätter med LP) för att kunna ritas som en linje.
