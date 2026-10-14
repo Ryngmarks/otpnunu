@@ -1,4 +1,16 @@
 {
+  "name": "otpnunu",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "setup": "node server/setup.mjs",
+    "start": "node server/main.mjs",
+    "import": "node server/import-files.mjs",
+    "dev": "node tests/dev-server.mjs",
+    "test": "node --test \"tests/*.test.mjs\" \"tools/*.test.mjs\""
+  },
+  "dependencies": {
+    "pg": "8.23.0"
+  }
 }

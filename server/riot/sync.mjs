@@ -1,33 +1,21 @@
 /*
- * Riot-import: koppla konton och synka matcher och mastery.
- * Får in riot (riot.mjs) och db (db.mjs) – testas med låtsasversioner.
+ * Riot-import: koppla konton och synka matcher, tidslinjer och mastery.
+ * Får in riot (riot.mjs) och db (server/db.mjs) – testas med låtsasversioner.
  */
 import { HttpError, RateLimitError, parseRiotId, regionFor } from './riot.mjs';
-import { deriveAccountMatch, deriveMastery, rawMatchRow } from './derive.mjs';
+import { RIFT_QUEUES, deriveAccountMatch, deriveDeaths, deriveMastery, rawMatchRow } from './derive.mjs';
 
-export const BATCH_SIZE = 80;     // matcher per synk – håller oss under 100 anrop / 2 min
+export const BATCH_SIZE = 40;     // matcher per omgång: match + tidslinje = 2 anrop, under 100 anrop / 2 min
 const MAX_HISTORY = 2000;         // så långt bak vi letar efter match-id:n
 
-/** Koppla ett Riot-konto (Riot ID) till användarens profil. */
-export async function linkAccount({ riot, db, userId, riotId, platform = 'euw1' }) {
+/** Koppla ett Riot-konto (Riot ID). */
+export async function linkAccount({ riot, db, riotId, platform = 'euw1' }) {
   const { gameName, tagLine } = parseRiotId(riotId);
   const region = regionFor(platform);
   const acc = await riot.accountByRiotId(region, gameName, tagLine);
   if (!acc) throw new HttpError(404, `Hittade inget konto ${gameName}#${tagLine}`);
-
-  const profile = await db.ensureProfile(userId);
   const existing = await db.getAccount(acc.puuid);
-  if (existing && existing.profile_id !== profile.id) {
-    throw new HttpError(409, 'Kontot är redan kopplat till en annan profil');
-  }
-  const row = {
-    puuid: acc.puuid,
-    profile_id: profile.id,
-    game_name: acc.gameName,
-    tag_line: acc.tagLine,
-    platform,
-    region,
-  };
+  const row = { puuid: acc.puuid, game_name: acc.gameName, tag_line: acc.tagLine, platform, region };
   await db.upsertAccount(row);
   return { ...row, already_linked: !!existing };
 }
@@ -49,7 +37,8 @@ async function findMissingIds({ riot, account, known }) {
 }
 
 /**
- * Synkar ett konto: mastery + upp till BATCH_SIZE saknade matcher.
+ * Synkar ett konto: mastery + upp till BATCH_SIZE saknade matcher (med tidslinje på Summoner's Rift).
+ * Rådata som redan finns (annat konto, eller importerade filer) hämtas inte igen.
  * Returnerar { puuid, imported, remaining, retryAfter, done }.
  * done = false betyder att webbsidan ska anropa igen (efter retryAfter sekunder om den är satt).
  */
@@ -70,26 +59,38 @@ export async function syncAccount({ riot, db, account, batchSize = BATCH_SIZE, n
     missing = await findMissingIds({ riot, account, known });
     const batch = missing.slice(0, batchSize);
 
-    // Rådata som redan finns (annat konto i samma match) hämtas inte igen
-    const stored = new Map((await db.getRawMatches(batch)).map((r) => [r.match_id, r.payload]));
+    const storedMatches = new Map((await db.getRawMatches(batch)).map((r) => [r.match_id, r.payload]));
+    const storedTimelines = new Map((await db.getRawTimelines(batch)).map((r) => [r.match_id, r.payload]));
+    const newMatches = [];
+    const newTimelines = [];
     const derived = [];
-    const newRaw = [];
+    const deaths = [];
     try {
       for (const id of batch) {
-        let match = stored.get(id);
+        let match = storedMatches.get(id);
         if (!match) {
           match = await riot.match(account.region, id);
           if (!match) { result.imported++; continue; } // borttagen hos Riot – hoppa över
-          newRaw.push(rawMatchRow(match, account.region));
+          newMatches.push(rawMatchRow(match, account.region));
         }
-        const row = deriveAccountMatch(match, account.puuid);
-        if (row) derived.push(row);
+        let timeline = storedTimelines.get(id) || null;
+        if (!timeline && RIFT_QUEUES.includes(Number(match.info.queueId))) {
+          timeline = await riot.timeline(account.region, id);
+          if (timeline) newTimelines.push({ match_id: id, payload: timeline });
+        }
+        const row = deriveAccountMatch(match, account.puuid, timeline);
+        if (row) {
+          derived.push(row);
+          deaths.push(...deriveDeaths(match, account.puuid, timeline));
+        }
         result.imported++;
       }
     } finally {
-      // Spara det vi hann hämta, även om Riot bad oss vänta
-      await db.insertRawMatches(newRaw);
+      // Spara det vi hann hämta, även om Riot bad oss vänta. Ordningen följer de främmande nycklarna.
+      await db.insertRawMatches(newMatches);
+      await db.insertRawTimelines(newTimelines);
       await db.upsertAccountMatches(derived);
+      await db.replaceDeaths(derived.map((r) => r.match_id), account.puuid, deaths);
     }
   } catch (err) {
     if (!(err instanceof RateLimitError)) throw err;

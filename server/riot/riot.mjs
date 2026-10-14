@@ -46,7 +46,7 @@ export function createRiot({
   maxWaitS = 5,     // längre väntan än så lämnas tillbaka till webbsidan
   spacingMs = 60,   // under 20 anrop/sekund
 }) {
-  if (!apiKey) throw new HttpError(500, 'RIOT_API_KEY saknas i Edge Function');
+  if (!apiKey) throw new HttpError(400, 'Riot-nyckeln saknas – lägg in RIOT_API_KEY i filen .env');
   let last = 0;
   let count = 0;
 
@@ -65,7 +65,7 @@ export function createRiot({
       }
       if (res.status === 404 && allow404) return null;
       if (res.status === 401 || res.status === 403) {
-        throw new HttpError(502, 'Riot-nyckeln är ogiltig eller har gått ut');
+        throw new HttpError(502, 'Riot-nyckeln är ogiltig eller har gått ut – byt RIOT_API_KEY i filen .env');
       }
       if (!res.ok) throw new HttpError(502, `Riot svarade ${res.status}`);
       return res.json();

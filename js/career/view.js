@@ -140,3 +140,51 @@ export function careerHtml(c) {
       <tfoot>${row('Totalt', c.total, 'career__total')}</tfoot>
     </table>`;
 }
+
+/** Skada och dödsfall (damageReport). Tomt om inga matcher har tidslinje. */
+export function damageHtml(rep, champs) {
+  if (!rep) return '';
+  const fmt = (v, k) => (k === 'deaths' ? dash(v) : num(v));
+  const row = (label, k, suffix = '') => `
+    <tr><th scope="row">${label}</th>
+      <td>${rep.win[k] == null ? '–' : `${fmt(rep.win[k], k)}${suffix}`}</td>
+      <td>${rep.loss[k] == null ? '–' : `${fmt(rep.loss[k], k)}${suffix}`}</td></tr>`;
+  const d = rep.deaths;
+  const max = Math.max(1, ...d.byWindow.map((w) => w.count));
+  const placeLabels = { camp: 'vid camp', objective: 'vid objective', torn: 'under torn', 'våg': 'vid våg' };
+  return `
+    <table class="career damage">
+      <thead><tr><th scope="col">${rep.games} matcher</th><th scope="col">Vinster (${rep.win.games})</th><th scope="col">Förluster (${rep.loss.games})</th></tr></thead>
+      <tbody>
+        ${row('Skada per minut', 'perMin')}
+        ${row('Skada vid 10 min', 'at10')}
+        ${row('Skada vid 14 min', 'at14')}
+        ${row('Andel av lagets skada', 'share', ' %')}
+        ${row('Dödsfall per match', 'deaths')}
+      </tbody>
+    </table>
+
+    <h3 class="sub">Dödsfall · ${dash(d.perGame)} per match · ${dash(d.before15)} före 15 min</h3>
+    <div class="bars" role="img" aria-label="Dödsfall per tidsintervall">
+      ${d.byWindow.map((w) => `
+        <div class="bars__col" title="${w.count} dödsfall ${w.label} min">
+          <span class="bars__n">${w.count}</span>
+          <i style="height:${Math.round((w.count / max) * 100)}%"></i>
+          <small>${w.label}</small>
+        </div>`).join('')}
+    </div>
+    <p class="chips chips--static">
+      ${Object.entries(d.places).map(([k, n]) => `<span>${placeLabels[k]} <b>${n}</b></span>`).join('')}
+      <span>ensam 1 mot 1 <b>${d.solo}</b></span>
+    </p>
+
+    ${d.killers.length ? `
+    <h3 class="sub">Med när du dör</h3>
+    <ul class="opponents">${d.killers.map((k) => `
+      <li>
+        ${k.championId == null ? '<span class="champ champ--empty" title="Torn eller minion">T</span>' : champIcon(champs, k.championId)}
+        <span class="opponents__name">${k.championId == null ? 'Torn/minion' : esc(champs.name(k.championId))}</span>
+        <span class="opponents__games">${k.involved} ggr</span>
+        <span class="wr wr--bad" title="dödade dig">${k.killed}</span>
+      </li>`).join('')}</ul>` : ''}`;
+}

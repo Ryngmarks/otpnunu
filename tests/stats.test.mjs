@@ -133,3 +133,29 @@ test('careerSummary: synkade matcher före säsongens slut räknas inte två gå
   assert.equal(c.recent.since, '2026-02-01T10:00:00Z');
   assert.equal(c.total.games, 11);
 });
+
+test('damageReport: vinster mot förluster och dödsfallen', async () => {
+  const { damageReport } = await import('../js/career/stats.js');
+  const { damageHtml } = await import('../js/career/view.js');
+  const m = (id, win, extra = {}) => ({ puuid: 'p', match_id: id, win, damage: 18000, duration_s: 1800, damage_at10: 4000, damage_at14: 6000, team_share: 30, ...extra });
+  const rows = [m('A', true), m('B', false, { damage_at10: 2000, team_share: 20 }), m('C', true, { damage_at10: null })];
+  const deaths = [
+    { puuid: 'p', match_id: 'B', t_ms: 200000, killer_champion_id: 64, helper_champion_ids: [], places: ['camp'] },
+    { puuid: 'p', match_id: 'B', t_ms: 1000000, killer_champion_id: null, helper_champion_ids: [64, 7], places: ['torn'] },
+    { puuid: 'p', match_id: 'X', t_ms: 1000, killer_champion_id: 1, helper_champion_ids: [], places: [] }, // annan match
+  ];
+  const r = damageReport(rows, deaths);
+  assert.equal(r.games, 2, 'match C saknar tidslinje');
+  assert.deepEqual([r.win.at10, r.loss.at10, r.win.perMin, r.loss.share], [4000, 2000, 600, 20]);
+  assert.deepEqual([r.win.deaths, r.loss.deaths], [0, 2]);
+  assert.equal(r.deaths.total, 2);
+  assert.equal(r.deaths.before15, 0.5);
+  assert.equal(r.deaths.solo, 1);
+  assert.deepEqual(r.deaths.places, { camp: 1, objective: 0, torn: 1, 'våg': 0 });
+  assert.deepEqual(r.deaths.killers[0], { championId: 64, involved: 2, killed: 1 });
+  assert.equal(r.deaths.byWindow[0].count, 1);
+  assert.equal(damageReport([m('C', true, { damage_at10: null })], deaths), null);
+  const html = damageHtml(r, { name: (id) => `<${id}>`, icon: () => null });
+  assert.match(html, /Torn\/minion/);
+  assert.match(html, /&lt;64&gt;/, 'namn escapas');
+});

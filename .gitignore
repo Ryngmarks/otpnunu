@@ -1,3 +1,4 @@
 node_modules/
-# Lokalt sparade matcher och tidslinjer (tools/timeline/fetch.mjs)
+.env
+# Lokalt sparade matcher (gamla tools/timeline/fetch.mjs) – kan importeras med npm run import
 data/

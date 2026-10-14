@@ -1,12 +1,19 @@
 /*
  * Matchanalys: Riots rådata in → rader för databasen ut.
  * Rena funktioner utan anrop eller sidoeffekter, så att all statistik
- * kan räknas om från nunu.raw_match om reglerna ändras.
+ * kan räknas om från rådatan om reglerna ändras.
  *
  * Höj DERIVED_VERSION när reglerna ändras.
+ *   1: grundstatistik
+ *   2: skada (typ, tagen, andel av laget, motståndarens) och tidslinjen (skada vid 10/14/20 min, dödsfall)
  */
-export const DERIVED_VERSION = 1;
+import { deriveTimeline } from '../analysis/damage.mjs';
+
+export const DERIVED_VERSION = 2;
 export const NUNU_CHAMPION_ID = 20;
+
+/** Köer på Summoner's Rift – bara för dem hämtas tidslinjen. */
+export const RIFT_QUEUES = [400, 420, 430, 440, 490, 700];
 
 const iso = (ms) => (ms ? new Date(ms).toISOString() : null);
 
@@ -18,9 +25,10 @@ export function durationSeconds(info) {
 
 /**
  * En rad för nunu.account_match: matchen ur ett kontos perspektiv.
+ * Med tidslinje kommer även skada vid 10/14/20 min med.
  * Returnerar null om kontot inte var med i matchen.
  */
-export function deriveAccountMatch(match, puuid) {
+export function deriveAccountMatch(match, puuid, timeline = null) {
   const info = (match && match.info) || {};
   const participants = info.participants || [];
   const p = participants.find((x) => x.puuid === puuid);
@@ -30,6 +38,9 @@ export function deriveAccountMatch(match, puuid) {
   const opponent = position
     ? participants.find((x) => x.teamId !== p.teamId && x.teamPosition === position)
     : null;
+  // Riot utelämnar fält som är 0
+  const teamDamage = participants.filter((x) => x.teamId === p.teamId).reduce((s, x) => s + (x.totalDamageDealtToChampions || 0), 0);
+  const tl = timeline ? deriveTimeline(timeline, match, puuid) : null;
 
   return {
     puuid,
@@ -50,8 +61,38 @@ export function deriveAccountMatch(match, puuid) {
     damage: p.totalDamageDealtToChampions || 0,
     vision: p.visionScore || 0,
     opponent_champion_id: opponent ? opponent.championId : null,
+    physical: p.physicalDamageDealtToChampions || 0,
+    magic: p.magicDamageDealtToChampions || 0,
+    true_damage: p.trueDamageDealtToChampions || 0,
+    taken: p.totalDamageTaken || 0,
+    mitigated: p.damageSelfMitigated || 0,
+    objectives: p.damageDealtToObjectives || 0,
+    team_share: teamDamage ? Math.round(((p.totalDamageDealtToChampions || 0) / teamDamage) * 1000) / 10 : null,
+    opponent_damage: opponent ? opponent.totalDamageDealtToChampions || 0 : null,
+    damage_at10: tl ? tl.at10 : null,
+    damage_at14: tl ? tl.at14 : null,
+    damage_at20: tl ? tl.at20 : null,
     derived_version: DERIVED_VERSION,
   };
+}
+
+/** Rader för nunu.death ur tidslinjen. Tom lista utan tidslinje. */
+export function deriveDeaths(match, puuid, timeline) {
+  const tl = timeline ? deriveTimeline(timeline, match, puuid) : null;
+  if (!tl) return [];
+  const seen = new Set();
+  return tl.deaths
+    .filter((d) => !seen.has(d.ms) && seen.add(d.ms)) // samma millisekund två gånger – behåll en
+    .map((d) => ({
+      puuid,
+      match_id: match.metadata.matchId,
+      t_ms: d.ms,
+      killer_champion_id: d.killerChampionId,
+      helper_champion_ids: d.helperChampionIds,
+      total: d.total,
+      places: d.places,
+      sources: d.sources,
+    }));
 }
 
 /** En rad för nunu.raw_match. */

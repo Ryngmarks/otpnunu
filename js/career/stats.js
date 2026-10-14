@@ -162,3 +162,62 @@ export function careerSummary(history, synced, { champion = NUNU } = {}) {
   );
   return { seasons, recent, total };
 }
+
+export const DEATH_WINDOWS = [[0, 5], [5, 10], [10, 15], [15, 20], [20, 25], [25, Infinity]];
+
+/**
+ * Skada och dödsfall ur tidslinjerna, för redan filtrerade matcher.
+ *   rows:   matcher (account_match), bara de med tidslinje räknas
+ *   deaths: dödsfall (nunu.death) – filtreras till rows
+ * Vinster och förluster jämförs sida vid sida. null om ingen match har tidslinje.
+ */
+export function damageReport(rows, deaths) {
+  const tl = rows.filter((r) => r.damage_at10 != null);
+  if (!tl.length) return null;
+  const key = (r) => `${r.puuid}|${r.match_id}`;
+  const keys = new Set(tl.map(key));
+  const own = deaths.filter((d) => keys.has(key(d)));
+  const deathsIn = new Map();
+  for (const d of own) deathsIn.set(key(d), (deathsIn.get(key(d)) || 0) + 1);
+
+  const avg = (list, f) => (list.length ? list.reduce((s, r) => s + (Number(f(r)) || 0), 0) / list.length : null);
+  const side = (list) => ({
+    games: list.length,
+    perMin: list.length ? round(avg(list, (r) => r.damage / Math.max(1, r.duration_s / 60)), 0) : null,
+    at10: list.length ? round(avg(list, (r) => r.damage_at10), 0) : null,
+    at14: list.length ? round(avg(list, (r) => r.damage_at14), 0) : null,
+    share: list.length ? round(avg(list, (r) => r.team_share), 0) : null,
+    deaths: list.length ? round(avg(list, (r) => deathsIn.get(key(r)) || 0)) : null,
+  });
+
+  const killers = new Map();
+  for (const d of own) {
+    const ids = new Set([d.killer_champion_id, ...(d.helper_champion_ids || [])]);
+    for (const id of ids) {
+      const k = killers.get(id) || { championId: id, involved: 0, killed: 0 };
+      k.involved++;
+      if (id === d.killer_champion_id) k.killed++;
+      killers.set(id, k);
+    }
+  }
+  const places = { camp: 0, objective: 0, torn: 0, 'våg': 0 };
+  for (const d of own) for (const p of d.places || []) if (p in places) places[p]++;
+
+  return {
+    games: tl.length,
+    win: side(tl.filter((r) => r.win)),
+    loss: side(tl.filter((r) => !r.win)),
+    deaths: {
+      total: own.length,
+      perGame: round(own.length / tl.length),
+      before15: round(own.filter((d) => d.t_ms < 15 * 60000).length / tl.length),
+      solo: own.filter((d) => d.killer_champion_id != null && !(d.helper_champion_ids || []).length).length,
+      byWindow: DEATH_WINDOWS.map(([a, b]) => ({
+        label: b === Infinity ? `${a}+` : `${a}–${b}`,
+        count: own.filter((d) => d.t_ms >= a * 60000 && d.t_ms < b * 60000).length,
+      })),
+      places,
+      killers: [...killers.values()].sort((a, b) => b.involved - a.involved || b.killed - a.killed).slice(0, 6),
+    },
+  };
+}
