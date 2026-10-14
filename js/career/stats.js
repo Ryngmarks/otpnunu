@@ -113,8 +113,9 @@ export function masterySummary(mastery, championId = NUNU) {
 
 /**
  * Hela karriären: äldre säsonger (nunu.season_history, förda in för hand) plus synkade matcher.
- *   history:  rader { season, champion_id, games, wins, kills, deaths, assists } – K/D/A är snitt per match
- *   synced:   redan filtrerade matcher från account_match
+ *   history:  rader { season, champion_id, games, wins, kills, deaths, assists, ended } – K/D/A är snitt per match
+ *   synced:   redan filtrerade matcher från account_match. Matcher före säsongernas senaste
+ *             slutdatum (ended) räknas inte – de finns redan med i säsongen.
  *   champion: champion-id eller null för alla
  * Säsongerna sorteras äldst först. Synkade matcher blir en egen rad sist.
  */
@@ -143,6 +144,8 @@ export function careerSummary(history, synced, { champion = NUNU } = {}) {
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([season, s]) => ({ season, ...line(s.games, s.wins, s.k, s.d, s.a) }));
 
+  const cutoff = history.reduce((mx, h) => (h.ended && h.ended > mx ? h.ended : mx), '');
+  if (cutoff) synced = synced.filter((r) => String(r.game_start) >= cutoff);
   const sum = (f) => synced.reduce((t, r) => t + (Number(r[f]) || 0), 0);
   const recent = {
     since: synced.reduce((mn, r) => (!mn || String(r.game_start) < mn ? String(r.game_start) : mn), ''),

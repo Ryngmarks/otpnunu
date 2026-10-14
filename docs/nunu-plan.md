@@ -248,6 +248,9 @@ snitt-K/D/A (avskrivet från OP.GG, fliken "All"). Siffrorna ligger i
 - Appen visar dem i kortet **Hela karriären**: en rad per säsong, en rad för synkade matcher
   (Summoner's Rift, alla konton) och totalen. Följer champion-filtret (Nunu / alla).
 - Appen kan bara läsa tabellen. Bara SQL Editor (eller service role) kan skriva.
-- Saknas i dagsläget: S2024 S2 och S2024 S3, samt de nedersta champions i S2021 och S2022
-  (Nunu-raderna är kompletta).
-- Säsongerna ska inte överlappa de synkade matcherna – annars räknas matcher två gånger.
+- Inlagt: S2021–S2025 för Rymm3n#EUW. S2021–S2024 S1 från fliken "All", S2024 S2–S2025 från
+  "Ranked". `champion_id 0` = övriga champions sammanslagna.
+- Saknas: de nedersta champions i S2021 och S2022 (Nunu-raderna är kompletta).
+- Överlapp: en säsong som pågick när synken börjar får ett slutdatum (`ended`). Synkade matcher
+  före det senaste slutdatumet räknas inte i totalen – de finns redan i säsongen.
+  S2025 har `ended = 2026-01-08` (ungefärligt säsongsslut; justera vid behov).

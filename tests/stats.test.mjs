@@ -120,3 +120,16 @@ test('careerSummary: äldre säsonger plus synkade matcher', async () => {
   assert.match(careerHtml(c), /Totalt/);
   assert.equal(careerHtml(careerSummary([], synced)), '', 'ingen tabell utan äldre säsonger');
 });
+
+test('careerSummary: synkade matcher före säsongens slut räknas inte två gånger', async () => {
+  const { careerSummary } = await import('../js/career/stats.js');
+  const history = [{ season: 'S2025', champion_id: 20, games: 10, wins: 5, kills: 5, deaths: 5, assists: 5, ended: '2026-01-08' }];
+  const synced = [
+    { game_start: '2025-10-01T10:00:00Z', win: true, kills: 1, deaths: 1, assists: 1 },
+    { game_start: '2026-02-01T10:00:00Z', win: true, kills: 1, deaths: 1, assists: 1 },
+  ];
+  const c = careerSummary(history, synced);
+  assert.equal(c.recent.games, 1);
+  assert.equal(c.recent.since, '2026-02-01T10:00:00Z');
+  assert.equal(c.total.games, 11);
+});
