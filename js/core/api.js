@@ -137,6 +137,7 @@ export function createApi({ url, key, storage = window.localStorage, fetchImpl =
     unlinkAccount: (puuid) => rest(`riot_account?puuid=eq.${encodeURIComponent(puuid)}`, { method: 'DELETE' }),
     matches: () => all('account_match?select=*&order=game_start.desc'),
     mastery: () => rest('mastery?select=puuid,champion_id,level,points,last_play_time'),
+    seasonHistory: () => rest('season_history?select=season,champion_id,games,wins,kills,deaths,assists'),
 
     /* ---- Edge Function ---- */
     riot: (body) => authed(`${root}/functions/v1/nunu-riot`, {

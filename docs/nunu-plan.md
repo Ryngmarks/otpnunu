@@ -224,6 +224,7 @@ Dev-servern kör den riktiga webbsidan och den riktiga Edge Function-koden mot e
 - [ ] Slå på *Secret scanning* och *Push protection*: GitHub → *Settings → Code security*.
 - [ ] Kör `supabase/nunu/001_init.sql` i Supabase SQL Editor.
 - [ ] Lägg till `nunu` under Supabase → *Settings → Data API → Exposed schemas*.
+- [ ] Kör `supabase/nunu/002_season_history.sql` (äldre säsonger, se nedan).
 - [ ] Skapa en Supabase access token (*Account → Access Tokens*) och lägg in den som GitHub-secret
       `SUPABASE_ACCESS_TOKEN` – eller välj manuell driftsättning.
 - [ ] Ansök om en **Personal API Key** hos Riot (*Register Product*). Utvecklingsnyckeln gäller bara
@@ -236,3 +237,17 @@ Dev-servern kör den riktiga webbsidan och den riktiga Edge Function-koden mot e
       fotbollens tabeller och andras konton; schemat nunu och johan@ryngmarks.com rörs inte).
 - [x] Repot heter nu `otpnunu`.
       Sidans adress: `https://ryngmarks.github.io/otpnunu/`.
+
+## Äldre säsonger (före Riots historik)
+
+Riot lämnar bara ut matcher ungefär två år bakåt. Äldre säsonger förs in för hand som
+sammanfattningar i `nunu.season_history`: per säsong och champion antal matcher, vinster och
+snitt-K/D/A (avskrivet från OP.GG, fliken "All"). Siffrorna ligger i
+`supabase/nunu/002_season_history.sql`; ändra där och kör filen igen för att rätta eller lägga till.
+
+- Appen visar dem i kortet **Hela karriären**: en rad per säsong, en rad för synkade matcher
+  (Summoner's Rift, alla konton) och totalen. Följer champion-filtret (Nunu / alla).
+- Appen kan bara läsa tabellen. Bara SQL Editor (eller service role) kan skriva.
+- Saknas i dagsläget: S2024 S2 och S2024 S3, samt de nedersta champions i S2021 och S2022
+  (Nunu-raderna är kompletta).
+- Säsongerna ska inte överlappa de synkade matcherna – annars räknas matcher två gånger.

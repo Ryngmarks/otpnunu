@@ -92,3 +92,31 @@ test('vyn escapar namn från Riot', () => {
   const list = matchesHtml([row({})], champs, [{ puuid: 'A', game_name: evil }, { puuid: 'B', game_name: 'x' }], 10);
   assert.ok(!list.includes('<img src=x'));
 });
+
+test('careerSummary: äldre säsonger plus synkade matcher', async () => {
+  const { careerSummary } = await import('../js/career/stats.js');
+  const { careerHtml } = await import('../js/career/view.js');
+  const history = [
+    { season: 'S2022', champion_id: 20, games: 10, wins: 6, kills: '8.0', deaths: '4.0', assists: '12.0' },
+    { season: 'S2021', champion_id: 20, games: 4, wins: 1, kills: 5, deaths: 5, assists: 5 },
+    { season: 'S2021', champion_id: 35, games: 2, wins: 2, kills: 10, deaths: 2, assists: 4 },
+  ];
+  const synced = [
+    { game_start: '2025-03-01T10:00:00Z', win: true, kills: 10, deaths: 2, assists: 8 },
+    { game_start: '2024-11-02T10:00:00Z', win: false, kills: 2, deaths: 6, assists: 4 },
+  ];
+  const c = careerSummary(history, synced, { champion: 20 });
+  assert.deepEqual(c.seasons.map((s) => [s.season, s.games, s.wins, s.losses]), [['S2021', 4, 1, 3], ['S2022', 10, 6, 4]]);
+  assert.equal(c.recent.games, 2);
+  assert.equal(c.recent.since, '2024-11-02T10:00:00Z');
+  assert.deepEqual([c.total.games, c.total.wins, c.total.losses, c.total.winrate], [16, 8, 8, 50]);
+  // KDA viktas efter antal matcher: (K 20+80+12 + A 20+120+12) / D (20+40+8)
+  assert.equal(c.total.kda, 3.88);
+
+  const all = careerSummary(history, [], { champion: null });
+  assert.equal(all.seasons[0].games, 6);
+  assert.equal(all.total.games, 16);
+
+  assert.match(careerHtml(c), /Totalt/);
+  assert.equal(careerHtml(careerSummary([], synced)), '', 'ingen tabell utan äldre säsonger');
+});

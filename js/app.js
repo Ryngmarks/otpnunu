@@ -3,8 +3,8 @@
  */
 import { createApi, ApiError } from './core/api.js';
 import { loadChampions } from './core/ddragon.js';
-import { NUNU, QUEUE_FILTERS, filterMatches, summarize, recentForm, byAccount, opponents, masterySummary } from './career/stats.js';
-import { esc, heroHtml, tilesHtml, formHtml, accountsHtml, opponentsHtml, matchesHtml } from './career/view.js';
+import { NUNU, QUEUE_FILTERS, filterMatches, summarize, recentForm, byAccount, opponents, masterySummary, careerSummary } from './career/stats.js';
+import { esc, heroHtml, tilesHtml, formHtml, accountsHtml, opponentsHtml, matchesHtml, careerHtml } from './career/view.js';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -17,6 +17,7 @@ const state = {
   accounts: [],
   matches: [],
   mastery: [],
+  history: [],
   champs: { name: (id) => `#${id}`, icon: () => null },
   filters: { champion: 'nunu', queue: 'rift', account: '' },
   limit: PAGE,
@@ -57,7 +58,7 @@ function show(view) {
 }
 
 function showLogin(message) {
-  Object.assign(state, { profile: null, accounts: [], matches: [], mastery: [] });
+  Object.assign(state, { profile: null, accounts: [], matches: [], mastery: [], history: [] });
   show('login');
   const err = $('[data-login-error]');
   err.textContent = message || '';
@@ -87,6 +88,9 @@ function render() {
   $('[data-matches]').innerHTML = matchesHtml(rows, state.champs, state.accounts, state.limit);
   $('[data-opponents]').innerHTML = opponentsHtml(opponents(rows), state.champs);
   $('[data-accounts]').innerHTML = accountsHtml(byAccount(accountRows, state.accounts), state.mastery);
+  const career = careerHtml(careerSummary(state.history, filterMatches(state.matches, { champion }), { champion }));
+  $('[data-career]').innerHTML = career;
+  $('[data-career-card]').hidden = !career;
 
   // Filterkontroller
   $$('[data-champion]').forEach((b) => b.classList.toggle('is-active', b.dataset.champion === f.champion));
@@ -99,8 +103,11 @@ function render() {
 }
 
 async function reload() {
-  const [accounts, matches, mastery] = await Promise.all([api.accounts(), api.matches(), api.mastery()]);
-  Object.assign(state, { accounts, matches, mastery });
+  const [accounts, matches, mastery, history] = await Promise.all([
+    api.accounts(), api.matches(), api.mastery(),
+    api.seasonHistory().catch(() => []),  // 002_season_history.sql är valfri
+  ]);
+  Object.assign(state, { accounts, matches, mastery, history });
   if (state.filters.account && !accounts.some((a) => a.puuid === state.filters.account)) state.filters.account = '';
   render();
 }

@@ -116,3 +116,27 @@ export function matchesHtml(rows, champs, accounts, limit) {
   }).join('')}</ul>
   ${rows.length > limit ? `<button class="btn btn--ghost btn--block" data-more>Visa fler (${rows.length - limit} till)</button>` : ''}`;
 }
+
+/** Hela karriären: en rad per äldre säsong, synkade matcher och totalen. Tomt om inga äldre säsonger finns. */
+export function careerHtml(c) {
+  if (!c.seasons.length) return '';
+  const wr = (s) => (s.winrate == null ? '–' : `<span class="wr ${s.winrate >= 50 ? 'wr--good' : 'wr--bad'}">${s.winrate}%</span>`);
+  const row = (label, s, cls = '') => `
+    <tr class="${cls}">
+      <th scope="row">${label}</th>
+      <td>${num(s.games)}</td>
+      <td>${num(s.wins)}–${num(s.losses)}</td>
+      <td>${wr(s)}</td>
+      <td>${dash(s.kda)}</td>
+    </tr>`;
+  const since = c.recent.since ? `Sedan ${esc(new Date(c.recent.since).toLocaleDateString('sv-SE', { month: 'short', year: 'numeric' }))}` : 'Synkat från Riot';
+  return `
+    <table class="career">
+      <thead><tr><th scope="col">Säsong</th><th scope="col">Matcher</th><th scope="col">V–F</th><th scope="col">Vinst</th><th scope="col">KDA</th></tr></thead>
+      <tbody>
+        ${c.seasons.map((s) => row(esc(s.season), s)).join('')}
+        ${c.recent.games ? row(since, c.recent) : ''}
+      </tbody>
+      <tfoot>${row('Totalt', c.total, 'career__total')}</tfoot>
+    </table>`;
+}

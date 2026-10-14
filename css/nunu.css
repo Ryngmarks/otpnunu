@@ -325,3 +325,14 @@ body.is-locked .bg {
 }
 .toast.is-visible { opacity: 1; transform: translate(-50%, 0); }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: .01ms !important; } }
+
+/* Hela karriären */
+[data-career-card] { margin-top: 14px; }
+.career { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.career th, .career td { padding: 8px 6px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.career th:first-child { text-align: left; white-space: normal; }
+.career thead th { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.career tbody th { font-weight: 600; }
+.career .wr { font-size: inherit; }
+.career__total th, .career__total td { border-bottom: 0; padding-top: 12px; font-family: var(--font-display); font-weight: 700; font-size: 18px; }
+@media (max-width: 420px) { .career th, .career td { padding: 7px 3px; font-size: 13px; } .career__total th, .career__total td { font-size: 15px; } }

@@ -13,6 +13,7 @@ index.html, css/, js/, assets/   webbsidan (GitHub Pages)
   js/career/                     statistik (rena funktioner) och vyer
   js/config.js                   Supabase-adress och publik nyckel
 supabase/nunu/001_init.sql       databasschemat "nunu" – körs för hand i SQL Editor
+supabase/nunu/002_season_history.sql  äldre säsonger (före Riots historik), förda in för hand
 supabase/functions/nunu-riot/    Edge Function: kopplar Riot-konton och synkar matcher
 supabase/cleanup/                engångsskript (borttagning av gamla fotbollsappen)
 tests/                           tester + dev-server.mjs

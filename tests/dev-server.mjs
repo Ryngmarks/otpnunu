@@ -123,6 +123,12 @@ export function createStore() {
     'anna@nik.se': { id: 'bbbbbbbb-0000-0000-0000-000000000002', password: 'nunu123' },
   };
   const t = { member: [{ user_id: users['johan@nik.se'].id }], profile: [], riot_account: [], raw_match: new Map(), account_match: [], mastery: [] };
+  // Äldre säsonger (002_season_history.sql) – här kopplade direkt till användaren
+  t.season_history = [
+    ['S2022', 20, 833, 451, 9.0, 5.3, 12.3], ['S2022', 35, 47, 19, 9.0, 5.9, 7.4],
+    ['S2023 S1', 20, 278, 136, 7.3, 5.4, 10.9], ['S2023 S1', 48, 10, 4, 6.4, 6.6, 8.4],
+  ].map(([season, champion_id, games, wins, kills, deaths, assists]) =>
+    ({ user_id: users['johan@nik.se'].id, season, champion_id, games, wins, kills, deaths, assists }));
   const tokens = new Map();
 
   // Samma gränssnitt som supabase/functions/nunu-riot/db.mjs (service role – ser allt)
@@ -163,6 +169,7 @@ export function createStore() {
     riot_account: (uid) => t.riot_account.filter((a) => ownProfiles(uid).includes(a.profile_id)),
     account_match: (uid) => t.account_match.filter((r) => ownPuuids(uid).includes(r.puuid)),
     mastery: (uid) => t.mastery.filter((r) => ownPuuids(uid).includes(r.puuid)),
+    season_history: (uid) => t.season_history.filter((r) => r.user_id === uid),
   };
 
   return { users, t, tokens, db, visible };

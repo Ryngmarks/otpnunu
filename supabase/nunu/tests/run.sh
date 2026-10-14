@@ -18,3 +18,7 @@ $PSQL -d "$DB" -c "insert into auth.users (id, email) values
 PGOPTIONS='-c client_min_messages=warning' $PSQL -d "$DB" -f ../001_init.sql
 PGOPTIONS='-c client_min_messages=warning' $PSQL -d "$DB" -f ../001_init.sql
 $PSQL -d "$DB" -f 001_rls_test.sql 2>&1 | sed -n 's/^psql:[^ ]* \(NOTICE\|ERROR\):  //p; /ALLA SQL-TESTER/p'
+# Äldre säsonger: körs efter att profilerna finns, två gånger (ska gå att köra om)
+PGOPTIONS='-c client_min_messages=warning' $PSQL -d "$DB" -f ../002_season_history.sql
+PGOPTIONS='-c client_min_messages=warning' $PSQL -d "$DB" -f ../002_season_history.sql
+$PSQL -d "$DB" -f 002_season_history_test.sql 2>&1 | sed -n 's/^psql:[^ ]* \(NOTICE\|ERROR\):  //p; /GODKÄNDA/p'

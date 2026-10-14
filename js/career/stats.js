@@ -110,3 +110,52 @@ export function masterySummary(mastery, championId = NUNU) {
     perAccount: rows,
   };
 }
+
+/**
+ * Hela karriären: äldre säsonger (nunu.season_history, förda in för hand) plus synkade matcher.
+ *   history:  rader { season, champion_id, games, wins, kills, deaths, assists } – K/D/A är snitt per match
+ *   synced:   redan filtrerade matcher från account_match
+ *   champion: champion-id eller null för alla
+ * Säsongerna sorteras äldst först. Synkade matcher blir en egen rad sist.
+ */
+export function careerSummary(history, synced, { champion = NUNU } = {}) {
+  const line = (games, wins, k, d, a) => ({
+    games,
+    wins,
+    losses: games - wins,
+    winrate: games ? round((wins / games) * 100, 0) : null,
+    kda: games ? round((k + a) / Math.max(1, d), 2) : null,
+    k, d, a,
+  });
+  const bySeason = new Map();
+  for (const h of history) {
+    if (champion != null && h.champion_id !== champion) continue;
+    const s = bySeason.get(h.season) || { games: 0, wins: 0, k: 0, d: 0, a: 0 };
+    const g = Number(h.games);
+    s.games += g;
+    s.wins += Number(h.wins);
+    s.k += Number(h.kills) * g;
+    s.d += Number(h.deaths) * g;
+    s.a += Number(h.assists) * g;
+    bySeason.set(h.season, s);
+  }
+  const seasons = [...bySeason.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([season, s]) => ({ season, ...line(s.games, s.wins, s.k, s.d, s.a) }));
+
+  const sum = (f) => synced.reduce((t, r) => t + (Number(r[f]) || 0), 0);
+  const recent = {
+    since: synced.reduce((mn, r) => (!mn || String(r.game_start) < mn ? String(r.game_start) : mn), ''),
+    ...line(synced.length, synced.filter((r) => r.win).length, sum('kills'), sum('deaths'), sum('assists')),
+  };
+
+  const all = [...seasons, recent];
+  const total = line(
+    all.reduce((t, s) => t + s.games, 0),
+    all.reduce((t, s) => t + s.wins, 0),
+    all.reduce((t, s) => t + s.k, 0),
+    all.reduce((t, s) => t + s.d, 0),
+    all.reduce((t, s) => t + s.a, 0),
+  );
+  return { seasons, recent, total };
+}
