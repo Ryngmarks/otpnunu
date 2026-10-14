@@ -1,5 +1,5 @@
 /*
- * Nunu Career – rendering. Funktioner som tar data och returnerar HTML.
+ * otpnunu – rendering. Funktioner som tar data och returnerar HTML.
  * Allt som kommer utifrån (namn, Riot ID) escapas.
  */
 import { queueLabel } from './stats.js';

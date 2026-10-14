@@ -1,5 +1,5 @@
 /*
- * Nunu Career – statistik. Rena funktioner: rader från nunu.account_match in, siffror ut.
+ * otpnunu – statistik. Rena funktioner: rader från nunu.account_match in, siffror ut.
  * Ingen DOM här, så allt kan testas i Node.
  */
 

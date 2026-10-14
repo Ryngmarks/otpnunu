@@ -1,5 +1,5 @@
 /*
- * Supabase-inställningar för Nunu Career.
+ * Supabase-inställningar för otpnunu.
  *
  * Hitta värdena i Supabase-projektet (eller via knappen "Connect" högst upp):
  *   SUPABASE_URL  Project Settings → Data API → Project URL

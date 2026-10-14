@@ -1,11 +1,11 @@
-# Nunu – plan
+# otpnunu – plan
 
 Statistik- och träningsapp för Nunu & Willump: historik från flera Riot-konton,
 matchanalys, en personlig Playbook och på sikt livefunktioner.
 
 **Status**
 - Steg 1 – API-test: **klart** (se avsnitt 5).
-- Fas 1 – Nunu Career: **databas, Edge Function och webbsidan klara och testade lokalt.**
+- Fas 1 – Career: **databas, Edge Function och webbsidan klara och testade lokalt.**
   Inget är kört i Supabase än.
 - Den gamla fotbollsappen (Notviken) är borttagen ur repot. Dess tabeller i Supabase tas bort med
   `supabase/cleanup/remove-football.sql` (avsnitt 8).
@@ -23,14 +23,14 @@ matchanalys, en personlig Playbook och på sikt livefunktioner.
 | Rådata | Riots matchsvar sparas oförändrade som `jsonb`. Tidslinjer sparas inte i fas 1. |
 | Import | Ingen importkö. Varje synk hämtar upp till 80 saknade matcher; webbsidan fortsätter tills allt är hämtat. |
 | Behörighet | Bara användare i `nunu.member` kan använda Nunu (och därmed Riot-nyckeln). Från början bara johan@ryngmarks.com. |
-| Ordning | Nunu Career → Playbook → matchplanering → Live. |
+| Ordning | Career → Playbook → matchplanering → Live. |
 | Kodstil | Enkel, modulär, testbar. Inga ramverk, ingen byggprocess, inga beroenden. |
 
 ## 2. Arkitektur
 
 ```
 Webbläsare (GitHub Pages)                    Supabase
-/        Nunu Career ─── läser egen data ──► schema nunu    Nunu-tabeller (RLS)
+/        otpnunu ─────── läser egen data ──► schema nunu    Nunu-tabeller (RLS)
             │                                                 ▲
             │ "koppla konto" / "synka"                        │ service role
             └──────────► Edge Function nunu-riot ─────────────┘
@@ -164,7 +164,7 @@ Därför sparas Riot ID också, så att kontona kan slås upp igen.
 3. Hela historiken tar ~16 min att hämta (Riots gräns) → synk i omgångar om 80, ingen kö.
 4. Remakes (t.ex. 0/0/0 med 0–4 CS) och Arena filtreras bort ur statistiken men sparas som rådata.
 
-## 6. Fas 1 – Nunu Career
+## 6. Fas 1 – Career
 
 ### Klart (testat lokalt)
 1. **`supabase/nunu/001_init.sql`** – schemat, sex tabeller, rättigheter och radskydd.
@@ -234,5 +234,5 @@ Dev-servern kör den riktiga webbsidan och den riktiga Edge Function-koden mot e
       `select json_build_object('players', (select json_agg(t) from public.players t), 'training_sessions', (select json_agg(t) from public.training_sessions t), 'results', (select json_agg(t) from public.results t), 'tactics', (select json_agg(t) from public.tactics t));`
 - [ ] Kör `supabase/cleanup/remove-football.sql` del för del (testad i Postgres: tar bara bort
       fotbollens tabeller och andras konton; schemat nunu och johan@ryngmarks.com rörs inte).
-- [ ] Byt namn på repot (*Settings → General → Repository name*, t.ex. `nunu-career`).
-      Sidans adress blir då `https://ryngmarks.github.io/nunu-career/`.
+- [x] Repot heter nu `otpnunu`.
+      Sidans adress: `https://ryngmarks.github.io/otpnunu/`.

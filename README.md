@@ -1,4 +1,4 @@
-# Nunu Career
+# otpnunu
 
 Statistik, mastery och matchhistorik för Nunu & Willump – från flera Riot-konton.
 På sikt även matchanalys, en personlig Playbook och livefunktioner.
@@ -48,6 +48,6 @@ Körs också automatiskt i GitHub Actions (`.github/workflows/nunu-ci.yml`).
 
 ---
 
-Nunu Career isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or
+otpnunu isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or
 anyone officially involved in producing or managing Riot Games properties. Riot Games, and all
 associated properties are trademarks or registered trademarks of Riot Games, Inc.

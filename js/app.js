@@ -1,5 +1,5 @@
 /*
- * Nunu Career – startpunkt. Kopplar ihop inloggning, data, filter, synk och rendering.
+ * otpnunu – startpunkt. Kopplar ihop inloggning, data, filter, synk och rendering.
  */
 import { createApi, ApiError } from './core/api.js';
 import { loadChampions } from './core/ddragon.js';
