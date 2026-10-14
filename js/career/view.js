@@ -324,7 +324,7 @@ export function earlyHtml(rep) {
 export function synergyHtml(rep, champs) {
   if (!rep) return '';
   return `
-    <p class="card__hint">Flest matcher först · <span class="sw is-win"></span> vinst <span class="sw is-loss"></span> förlust · din vinst totalt ${rep.baseline} %</p>
+    <p class="card__hint">${rep.games} matcher · flest matcher först · <span class="sw is-win"></span> vinst <span class="sw is-loss"></span> förlust · din vinst totalt ${rep.baseline} %</p>
     <div class="split">
       <div><h3 class="sub">Mest med</h3>${splitList(rep.mostAllies, champs)}</div>
       <div><h3 class="sub">Mest mot</h3>${splitList(rep.mostEnemies, champs)}</div>
