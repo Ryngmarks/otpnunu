@@ -1,0 +1,47 @@
+# Nunu – begränsat Riot API-test (steg 1 i docs/nunu-plan.md)
+#
+# Körs på GitHubs servrar så att Riot-nyckeln aldrig behöver ligga i koden.
+# Nyckeln läggs in som repository secret RIOT_API_KEY. Saknas den hoppas
+# API-steget över (enhetstesterna körs ändå).
+#
+# Kör igen efter att nyckeln lagts in: Actions → "Nunu – Riot API-test"
+# → senaste körningen → "Re-run all jobs". Resultatet visas i körningens Summary.
+name: Nunu – Riot API-test
+
+on:
+  push:
+    branches: [nunu/dev]
+    paths:
+      - 'nunu/tools/**'
+      - '.github/workflows/nunu-riot-api-test.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nunu-riot-api-test
+  cancel-in-progress: false
+
+jobs:
+  api-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enhetstester
+        run: node --test "nunu/tools/*.test.mjs"
+
+      - name: Riot API-test (20 matcher + mastery)
+        env:
+          RIOT_API_KEY: ${{ secrets.RIOT_API_KEY }}
+          RIOT_ID: 'Rymm3n#EUW'
+          RIOT_PLATFORM: euw1
+          RIOT_REGION: europe
+          MATCH_COUNT: '20'
+        run: node nunu/tools/riot-api-test.mjs
