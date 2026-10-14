@@ -20,12 +20,14 @@ export function findMe(match, puuid) {
   return { me, opponent };
 }
 
-/** Skada enligt slutstatistiken i matchen. */
+/** Skada enligt slutstatistiken i matchen. Riot utelämnar fält som är 0, därav `|| 0`. */
 export function damageSummary(match, puuid) {
   const { me, opponent } = findMe(match, puuid);
+  const v = (p, k) => p[k] || 0;
   const minutes = match.info.gameDuration / 60;
   const team = match.info.participants.filter((p) => p.teamId === me.teamId);
-  const teamDamage = team.reduce((s, p) => s + p.totalDamageDealtToChampions, 0);
+  const teamDamage = team.reduce((s, p) => s + v(p, 'totalDamageDealtToChampions'), 0);
+  const dmg = v(me, 'totalDamageDealtToChampions');
   return {
     matchId: match.metadata.matchId,
     start: new Date(match.info.gameStartTimestamp || match.info.gameCreation).toISOString(),
@@ -33,18 +35,18 @@ export function damageSummary(match, puuid) {
     minutes: round(minutes, 1),
     champion: me.championName,
     opponent: opponent ? opponent.championName : null,
-    win: me.win,
-    kda: `${me.kills}/${me.deaths}/${me.assists}`,
-    toChampions: me.totalDamageDealtToChampions,
-    perMin: round(me.totalDamageDealtToChampions / minutes),
-    physical: me.physicalDamageDealtToChampions,
-    magic: me.magicDamageDealtToChampions,
-    true: me.trueDamageDealtToChampions,
-    teamShare: teamDamage ? round((me.totalDamageDealtToChampions / teamDamage) * 100) : null,
-    taken: me.totalDamageTaken,
-    mitigated: me.damageSelfMitigated,
-    objectives: me.damageDealtToObjectives,
-    opponentToChampions: opponent ? opponent.totalDamageDealtToChampions : null,
+    win: !!me.win,
+    kda: `${v(me, 'kills')}/${v(me, 'deaths')}/${v(me, 'assists')}`,
+    toChampions: dmg,
+    perMin: round(dmg / minutes),
+    physical: v(me, 'physicalDamageDealtToChampions'),
+    magic: v(me, 'magicDamageDealtToChampions'),
+    true: v(me, 'trueDamageDealtToChampions'),
+    teamShare: teamDamage ? round((dmg / teamDamage) * 100) : null,
+    taken: v(me, 'totalDamageTaken'),
+    mitigated: v(me, 'damageSelfMitigated'),
+    objectives: v(me, 'damageDealtToObjectives'),
+    opponentToChampions: opponent ? v(opponent, 'totalDamageDealtToChampions') : null,
   };
 }
 

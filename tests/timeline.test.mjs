@@ -175,3 +175,16 @@ test('dayRange: flera dagar bakåt', () => {
   assert.equal(r.label, '2026-10-08_2026-10-14');
   assert.throws(() => parseArgs(['--days', '0']), /1–400/);
 });
+
+test('damageSummary: fält som Riot utelämnar (värdet 0) blir 0, inte NaN', () => {
+  const m = structuredClone(match);
+  delete m.info.participants[0].trueDamageDealtToChampions;
+  delete m.info.participants[0].deaths;
+  delete m.info.participants[1].totalDamageDealtToChampions;
+  delete m.info.participants[3].win;
+  const s = damageSummary(m, ME);
+  assert.equal(s.true, 0);
+  assert.equal(s.kda, '5/0/9');
+  assert.equal(s.teamShare, 43); // 15000 av 35000
+  assert.doesNotMatch(formatReport(s, [], []), /NaN|undefined/);
+});
