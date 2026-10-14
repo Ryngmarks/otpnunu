@@ -160,3 +160,32 @@ test('damageReport: vinster mot förluster och dödsfallen', async () => {
   assert.match(html, /Torn\/minion/);
   assert.match(html, /&lt;64&gt;/, 'namn escapas');
 });
+
+test('gankReport: ganks per lane, första ganken och vinst', async () => {
+  const { gankReport } = await import('../js/career/stats.js');
+  const { gankHtml } = await import('../js/career/view.js');
+  const g = (t, lane, takedowns, died = false) => ({ t, lane, takedowns, kills: takedowns, died, vsJungler: false, victims: [] });
+  const rows = [
+    { win: true, ganks: [g(200000, 'bot', 1), g(400000, 'top', 2)] },
+    { win: false, ganks: [g(150000, 'top', 0, true), g(300000, 'bot', 1, true)] },
+    { win: true, ganks: [] },
+    { win: false, ganks: null },           // ingen tidslinje / inte jungle – räknas inte
+  ];
+  const r = gankReport(rows);
+  assert.equal(r.games, 3);
+  assert.equal(r.ganks, 3, 'död i lane utan takedown är ingen gank');
+  assert.equal(r.laneDeaths, 1);
+  assert.equal(r.success, 67);
+  assert.equal(r.trades, 1);
+  assert.equal(r.first.median, 200000);
+  assert.deepEqual([r.first.lyckad.games, r.first.lyckad.winrate], [1, 100]);
+  assert.deepEqual([r.first.byte.games, r.first.byte.winrate], [1, 0]);
+  assert.deepEqual([r.first.ingen.games, r.first.ingen.winrate], [1, 100]);
+  const bot = r.lanes.find((l) => l.lane === 'bot');
+  assert.deepEqual([bot.ganks, bot.success, bot.firstShare, bot.firstWin.games], [2, 50, 100, 2]);
+  assert.deepEqual(r.byCount.map((c) => c.games), [1, 1, 1, 0]);
+  assert.equal(gankReport([{ win: true, ganks: null }]), null);
+  const html = gankHtml(r);
+  assert.match(html, /Ganks per match/);
+  assert.match(html, /dog du i en lane utan takedown/);
+});

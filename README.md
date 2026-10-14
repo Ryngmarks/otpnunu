@@ -15,6 +15,8 @@ index.html, css/, js/, assets/   webbsidan (GitHub Pages)
 supabase/nunu/001_init.sql       databasschemat "nunu" – körs för hand i SQL Editor
 supabase/nunu/002_season_history.sql  äldre säsonger (före Riots historik), förda in för hand
 supabase/nunu/003_timelines.sql  skada, dödsfall och bucketen för tidslinjer (Storage)
+supabase/nunu/004_rekey.sql      byte av Riot-nyckel (nytt PUUID)
+supabase/nunu/005_ganks.sql      ganks före 15:00 (docs/nunu-early-game.md)
 supabase/functions/nunu-riot/    Edge Function: kopplar Riot-konton och synkar matcher
 supabase/cleanup/                engångsskript (borttagning av gamla fotbollsappen)
 tests/                           tester + dev-server.mjs

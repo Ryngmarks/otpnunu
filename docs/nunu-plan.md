@@ -227,6 +227,7 @@ Dev-servern kör den riktiga webbsidan och den riktiga Edge Function-koden mot e
 - [ ] Kör `supabase/nunu/002_season_history.sql` (äldre säsonger, se nedan).
 - [ ] Kör `supabase/nunu/003_timelines.sql` (skada, dödsfall och bucketen `timelines`).
 - [ ] Kör `supabase/nunu/004_rekey.sql` (krävs för byte av Riot-nyckel, se nedan).
+- [ ] Kör `supabase/nunu/005_ganks.sql` (gank-analys, se `docs/nunu-early-game.md`).
 - [ ] Skapa en Supabase access token (*Account → Access Tokens*) och lägg in den som GitHub-secret
       `SUPABASE_ACCESS_TOKEN` – eller välj manuell driftsättning.
 - [ ] Ansök om en **Personal API Key** hos Riot (*Register Product*). Utvecklingsnyckeln gäller bara

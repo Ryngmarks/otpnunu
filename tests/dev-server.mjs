@@ -73,11 +73,20 @@ function buildTimeline(match) {
     events: [],
   }));
   const places = [{ name: 'SRU_Blue', type: 'MONSTER' }, { name: 'SRU_Dragon_Fire', type: 'MONSTER' }, { name: 'Turret_T2_C_05_A', type: 'TOWER' }, { name: 'SRU_ChaosMinionMelee', type: 'MINION' }, null];
+  // Kartpositioner: bot, top, mid, jungle (blå buff), river (drake)
+  const spots = [{ x: 8000, y: 1000 }, { x: 1000, y: 9000 }, { x: 7000, y: 7200 }, { x: 3800, y: 7900 }, { x: 9866, y: 4414 }];
+  const seed = Number(match.metadata.matchId.slice(-3));
+  for (let i = 0; i < (me.kills || 0); i++) {
+    const ms = Math.round(((i + 1) / ((me.kills || 0) + 2)) * match.info.gameDuration * 1000);
+    frames[Math.min(minutes, Math.floor(ms / 60000))].events.push({
+      type: 'CHAMPION_KILL', timestamp: ms, killerId: 1, victimId: 6, assistingParticipantIds: [], position: spots[(seed + i) % spots.length],
+    });
+  }
   for (let i = 0; i < (me.deaths || 0); i++) {
     const ms = Math.round(((i + 1) / ((me.deaths || 0) + 1)) * match.info.gameDuration * 1000);
     const place = places[(i + Number(match.metadata.matchId.slice(-2))) % places.length];
     frames[Math.min(minutes, Math.floor(ms / 60000))].events.push({
-      type: 'CHAMPION_KILL', timestamp: ms, killerId: 6, victimId: 1, assistingParticipantIds: i % 3 === 0 ? [] : [6],
+      type: 'CHAMPION_KILL', timestamp: ms, killerId: 6, victimId: 1, assistingParticipantIds: i % 3 === 0 ? [] : [6], position: spots[(seed + i + 2) % spots.length],
       victimDamageReceived: [
         { participantId: 6, name: 'x', type: 'OTHER', physicalDamage: 800 + i * 50, magicDamage: 200 },
         ...(place ? [{ participantId: 0, ...place, physicalDamage: 250 }] : []),

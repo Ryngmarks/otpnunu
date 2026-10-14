@@ -221,3 +221,66 @@ export function damageReport(rows, deaths) {
     },
   };
 }
+
+/* ---------------- Ganks (docs/nunu-early-game.md, modul 1) ---------------- */
+
+export const GANK_LANES = ['top', 'mid', 'bot'];
+const gankOutcome = (g) => (g.takedowns === 0 ? 'död' : g.died ? 'byte' : 'lyckad');
+const pct = (a, b) => (b ? round((a / b) * 100, 0) : null);
+
+/**
+ * Ganks före 15:00 för redan filtrerade matcher. Bara matcher där ganks är uträknade
+ * (du spelade jungle och tidslinjen finns) räknas. null om det inte finns några.
+ */
+export function gankReport(rows) {
+  const games = rows.filter((r) => Array.isArray(r.ganks));
+  if (!games.length) return null;
+  const all = games.flatMap((r) => r.ganks.map((g) => ({ ...g, win: r.win })));
+  const ganks = all.filter((g) => g.takedowns > 0);
+  const winrate = (list) => ({ games: list.length, winrate: pct(list.filter((r) => r.win).length, list.length) });
+
+  const firsts = games.map((r) => ({ win: r.win, first: r.ganks.find((g) => g.takedowns > 0) || null }));
+  const withFirst = firsts.filter((f) => f.first);
+  const times = withFirst.map((f) => f.first.t).sort((a, b) => a - b);
+
+  const lanes = GANK_LANES.map((lane) => {
+    const list = ganks.filter((g) => g.lane === lane);
+    const firstHere = withFirst.filter((f) => f.first.lane === lane);
+    return {
+      lane,
+      ganks: list.length,
+      success: pct(list.filter((g) => !g.died).length, list.length),
+      trades: list.filter((g) => g.died).length,
+      takedowns: list.reduce((s, g) => s + g.takedowns, 0),
+      firstShare: pct(firstHere.length, withFirst.length),
+      firstWin: winrate(firstHere),
+    };
+  });
+
+  const byCount = [[0, 0, '0'], [1, 1, '1'], [2, 2, '2'], [3, Infinity, '3+']].map(([a, b, label]) => {
+    const list = games.filter((r) => {
+      const n = r.ganks.filter((g) => g.takedowns > 0).length;
+      return n >= a && n <= b;
+    });
+    return { label, ...winrate(list) };
+  });
+
+  return {
+    games: games.length,
+    ganks: ganks.length,
+    perGame: round(ganks.length / games.length),
+    success: pct(ganks.filter((g) => !g.died).length, ganks.length),
+    trades: ganks.filter((g) => g.died).length,
+    takedowns: ganks.reduce((s, g) => s + g.takedowns, 0),
+    vsJungler: ganks.filter((g) => g.vsJungler).length,
+    laneDeaths: all.filter((g) => g.takedowns === 0).length,
+    first: {
+      median: times.length ? times[Math.floor((times.length - 1) / 2)] : null,
+      lyckad: winrate(withFirst.filter((f) => gankOutcome(f.first) === 'lyckad')),
+      byte: winrate(withFirst.filter((f) => gankOutcome(f.first) === 'byte')),
+      ingen: winrate(firsts.filter((f) => !f.first)),
+    },
+    lanes,
+    byCount,
+  };
+}

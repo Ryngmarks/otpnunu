@@ -34,6 +34,8 @@ test('derive: en vanlig match ur kontots perspektiv, med skada', () => {
 test('derive: med tidslinje – skada vid 10/14/20 min och dödsfall', () => {
   const r = deriveAccountMatch(matchJson(11), P1, timelineJson(11));
   assert.deepEqual([r.damage_at10, r.damage_at14, r.damage_at20], [4000, 5600, 8000]);
+  assert.deepEqual(r.ganks, [], 'jungler med tidslinje: ganks räknas (inga i exemplet)');
+  assert.equal(deriveAccountMatch(matchJson(11), P1).ganks, null, 'utan tidslinje');
   const d = deriveDeaths(matchJson(11), P1, timelineJson(11));
   assert.equal(d.length, 2);
   assert.deepEqual(d[0], {

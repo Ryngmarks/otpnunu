@@ -349,3 +349,12 @@ body.is-locked .bg {
 .chips--static { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 0; }
 .chips--static span { padding: 5px 10px; border-radius: 999px; border: 1px solid var(--line); font-size: 13px; color: var(--muted); }
 .chips--static b { color: var(--text, #fff); margin-left: 3px; }
+
+/* Ganks */
+[data-gank-card] { margin-top: 14px; }
+.tiles--inner { margin: 0 0 16px; grid-template-columns: repeat(2, 1fr); }
+@media (min-width: 720px) { .tiles--inner { grid-template-columns: repeat(4, 1fr); } }
+.ganks td { min-width: 56px; }
+.ganks small { font-size: 11.5px; }
+@media (max-width: 420px) { .ganks td small { display: block; } }
+.card__hint--after { margin: 14px 0 0; }

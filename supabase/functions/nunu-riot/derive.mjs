@@ -6,10 +6,12 @@
  * Höj DERIVED_VERSION när reglerna ändras.
  *   1: grundstatistik
  *   2: skada (typ, tagen, andel av laget, motståndarens) och tidslinjen (skada vid 10/14/20 min, dödsfall)
+ *   3: ganks före 15:00 (gank.mjs)
  */
 import { deriveTimeline } from './damage.mjs';
+import { findGanks } from './gank.mjs';
 
-export const DERIVED_VERSION = 2;
+export const DERIVED_VERSION = 3;
 export const NUNU_CHAMPION_ID = 20;
 
 /** Köer på Summoner's Rift – bara för dem hämtas tidslinjen. */
@@ -74,6 +76,7 @@ export function deriveAccountMatch(match, puuid, timeline = null, aliases = []) 
     damage_at10: tl ? tl.at10 : null,
     damage_at14: tl ? tl.at14 : null,
     damage_at20: tl ? tl.at20 : null,
+    ganks: tl ? findGanks(match, timeline, ids) : null,  // null = ingen tidslinje eller inte jungle
     derived_version: DERIVED_VERSION,
   };
 }

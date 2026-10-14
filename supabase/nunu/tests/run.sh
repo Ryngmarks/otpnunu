@@ -30,3 +30,7 @@ $PSQL -d "$DB" -f 003_timelines_test.sql 2>&1 | sed -n 's/^psql:[^ ]* \(NOTICE\|
 PGOPTIONS='-c client_min_messages=warning' $PSQL -d "$DB" -f ../004_rekey.sql
 PGOPTIONS='-c client_min_messages=warning' $PSQL -d "$DB" -f ../004_rekey.sql
 $PSQL -d "$DB" -f 004_rekey_test.sql 2>&1 | sed -n 's/^psql:[^ ]* \(NOTICE\|ERROR\):  //p; /GODKÄNDA/p'
+# Ganks: kolumnen finns och går att köra om
+PGOPTIONS='-c client_min_messages=warning' $PSQL -d "$DB" -f ../005_ganks.sql
+PGOPTIONS='-c client_min_messages=warning' $PSQL -d "$DB" -f ../005_ganks.sql
+$PSQL -d "$DB" -Atc "select 'GANKTESTER GODKÄNDA' from information_schema.columns where table_schema = 'nunu' and table_name = 'account_match' and column_name = 'ganks' and data_type = 'jsonb'"

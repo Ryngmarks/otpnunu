@@ -3,8 +3,8 @@
  */
 import { createApi, ApiError } from './core/api.js';
 import { loadChampions } from './core/ddragon.js';
-import { NUNU, QUEUE_FILTERS, filterMatches, summarize, recentForm, byAccount, opponents, masterySummary, careerSummary, damageReport } from './career/stats.js';
-import { esc, heroHtml, tilesHtml, formHtml, accountsHtml, opponentsHtml, matchesHtml, careerHtml, damageHtml } from './career/view.js';
+import { NUNU, QUEUE_FILTERS, filterMatches, summarize, recentForm, byAccount, opponents, masterySummary, careerSummary, damageReport, gankReport } from './career/stats.js';
+import { esc, heroHtml, tilesHtml, formHtml, accountsHtml, opponentsHtml, matchesHtml, careerHtml, damageHtml, gankHtml } from './career/view.js';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -92,6 +92,9 @@ function render() {
   const career = careerHtml(careerSummary(state.history, filterMatches(state.matches, { champion }), { champion }));
   $('[data-career]').innerHTML = career;
   $('[data-career-card]').hidden = !career;
+  const ganks = gankHtml(gankReport(rows));
+  $('[data-ganks]').innerHTML = ganks;
+  $('[data-gank-card]').hidden = !ganks;
   const damage = damageHtml(damageReport(rows, state.deaths), state.champs);
   $('[data-damage]').innerHTML = damage;
   $('[data-damage-card]').hidden = !damage;

@@ -188,3 +188,47 @@ export function damageHtml(rep, champs) {
         <span class="wr wr--bad" title="dödade dig">${k.killed}</span>
       </li>`).join('')}</ul>` : ''}`;
 }
+
+/* ---------------- Ganks ---------------- */
+
+const LANE_NAMES = { top: 'Top', mid: 'Mid', bot: 'Bot' };
+const clock = (ms) => (ms == null ? '–' : `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, '0')}`);
+const wrCell = (w) => (w.games ? `<span class="wr ${w.winrate >= 50 ? 'wr--good' : 'wr--bad'}">${w.winrate}%</span> <small class="muted">(${w.games})</small>` : '–');
+
+/** Gank-kortet (gankReport). Tomt om inga matcher har ganks uträknade. */
+export function gankHtml(rep) {
+  if (!rep) return '';
+  const tile = (value, label, extra = '') => `<div class="tile ${extra}"><b>${value}</b><span>${label}</span></div>`;
+  return `
+    <div class="tiles tiles--inner">
+      ${tile(dash(rep.perGame), `Ganks per match · ${rep.ganks} st`)}
+      ${tile(rep.success == null ? '–' : `${rep.success}%`, `Lyckade · ${rep.trades} byten`, rep.success == null ? '' : rep.success >= 60 ? 'tile--good' : 'tile--bad')}
+      ${tile(clock(rep.first.median), 'Första ganken (median)')}
+      ${tile(num(rep.takedowns), `Takedowns i ganks · ${rep.vsJungler} mot jungler`)}
+    </div>
+
+    <table class="career ganks">
+      <thead><tr><th scope="col">Lane</th><th scope="col">Ganks</th><th scope="col">Lyckade</th><th scope="col" title="Andel matcher där första ganken var här">Först</th><th scope="col" title="Vinst när första ganken var här">Vinst</th></tr></thead>
+      <tbody>${rep.lanes.map((l) => `
+        <tr><th scope="row">${LANE_NAMES[l.lane]}</th>
+          <td>${l.ganks}</td>
+          <td>${l.success == null ? '–' : `${l.success}%`}</td>
+          <td>${l.firstShare == null ? '–' : `${l.firstShare}%`}</td>
+          <td>${wrCell(l.firstWin)}</td></tr>`).join('')}
+      </tbody>
+    </table>
+
+    <h3 class="sub">Första ganken och vinst</h3>
+    <table class="career ganks">
+      <tbody>
+        <tr><th scope="row">Lyckad (överlevde)</th><td>${wrCell(rep.first.lyckad)}</td></tr>
+        <tr><th scope="row">Byte (dog själv)</th><td>${wrCell(rep.first.byte)}</td></tr>
+        <tr><th scope="row">Ingen gank före 15:00</th><td>${wrCell(rep.first.ingen)}</td></tr>
+      </tbody>
+    </table>
+
+    <h3 class="sub">Antal ganks före 15:00 och vinst</h3>
+    <p class="chips chips--static">${rep.byCount.map((c) => `<span>${c.label} ${c.label === '1' ? 'gank' : 'ganks'} <b>${c.games ? `${c.winrate}%` : '–'}</b> <small>(${c.games})</small></span>`).join('')}</p>
+    <p class="card__hint card__hint--after">Gank = kill eller assist i en lane före 15:00. Kills i lane utan dig och strider i jungle/river räknas inte.
+      ${rep.laneDeaths ? `${rep.laneDeaths} gånger dog du i en lane utan takedown – kanske en misslyckad gank, men det går inte att veta säkert.` : ''}</p>`;
+}
