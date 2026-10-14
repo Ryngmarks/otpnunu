@@ -214,7 +214,9 @@ test('modul 2–5: early game, synergier, matchups och tidigt → vinst', async 
 
   const syn = s.synergyReport(rows, { minGames: 2 });
   assert.equal(syn.baseline, 50);
-  assert.deepEqual(syn.bestAllies[0], { championId: 22, games: 3, wins: 2, winrate: 67 });
+  assert.deepEqual(syn.bestAllies[0], { championId: 22, games: 3, wins: 2, losses: 1, winrate: 67 });
+  assert.equal(syn.mostAllies[0].championId, 22, 'flest matcher först');
+  assert.ok(syn.mostEnemies.every((c, i, l) => !i || l[i - 1].games >= c.games));
   assert.deepEqual(syn.hardestEnemies.map((c) => c.championId), [7, 64]);
 
   const tags = (id) => ({ 64: ['Fighter'], 51: ['Marksman'], 7: ['Assassin', 'Mage'], 121: ['Assassin'] }[id] || []);
@@ -233,6 +235,7 @@ test('modul 2–5: early game, synergier, matchups och tidigt → vinst', async 
     assert.ok(html.length > 50);
     assert.doesNotMatch(html, /undefined|NaN|<64>/, 'inga trasiga värden, namn escapas');
   }
+  assert.match(v.synergyHtml(syn, champs), /2 V – 1 F[\s\S]*67% vinst[\s\S]*33% förlust/);
   assert.equal(s.earlyReport([{ win: true, early: null }]), null);
   assert.equal(v.earlyHtml(null), '');
 });

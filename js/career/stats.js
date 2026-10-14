@@ -333,8 +333,11 @@ export function earlyReport(rows) {
   return { games: games.length, minutes };
 }
 
-/** Modul 3: lagkamrater och motståndare (champions) med vinst. Bara champions med minst minGames matcher. */
-export function synergyReport(rows, { minGames = 5, limit = 5 } = {}) {
+/**
+ * Modul 3: lagkamrater och motståndare (champions) med vinst och förlust. Bara champions med minst
+ * minGames matcher. mostAllies/mostEnemies är de man spelat flest matcher med/mot.
+ */
+export function synergyReport(rows, { minGames = 5, limit = 5, mostLimit = 8 } = {}) {
   const games = rows.filter((r) => Array.isArray(r.allies) && Array.isArray(r.enemies));
   if (!games.length) return null;
   const tally = (key) => {
@@ -347,16 +350,20 @@ export function synergyReport(rows, { minGames = 5, limit = 5 } = {}) {
         map.set(id, t);
       }
     }
-    return [...map.values()].filter((t) => t.games >= minGames).map((t) => ({ ...t, winrate: pct(t.wins, t.games) }));
+    return [...map.values()].filter((t) => t.games >= minGames)
+      .map((t) => ({ ...t, losses: t.games - t.wins, winrate: pct(t.wins, t.games) }));
   };
   const allies = tally('allies');
   const enemies = tally('enemies');
   const best = (list) => [...list].sort((a, b) => b.winrate - a.winrate || b.games - a.games).slice(0, limit);
   const worst = (list) => [...list].sort((a, b) => a.winrate - b.winrate || b.games - a.games).slice(0, limit);
+  const most = (list) => [...list].sort((a, b) => b.games - a.games || b.winrate - a.winrate).slice(0, mostLimit);
   return {
     games: games.length,
     baseline: winrateOf(games).winrate,
     minGames,
+    mostAllies: most(allies),
+    mostEnemies: most(enemies),
     bestAllies: best(allies),
     worstAllies: worst(allies),
     easiestEnemies: best(enemies),

@@ -498,3 +498,16 @@ body.is-locked .bg {
 .placebars__track { height: 12px; border-radius: 4px; background: rgba(143, 211, 255, .06); overflow: hidden; }
 .placebars__track i { display: block; height: 100%; border-radius: 4px; background: var(--loss); }
 @media (max-width: 420px) { .placebars li { grid-template-columns: 7rem minmax(0, 1fr) 2.6rem; } }
+
+/* Synergier: vinst och förlust i en delad stapel */
+.champbars__head { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.splitbar { display: flex; gap: 2px; height: 10px; }
+.splitbar i { display: block; height: 100%; min-width: 4px; }
+.splitbar i.is-good { background: var(--win); }
+.splitbar i.is-bad { background: var(--loss); }
+.splitbar i:first-child { border-radius: 4px 0 0 4px; }
+.splitbar i:last-child { border-radius: 0 4px 4px 0; }
+.splitbar i:only-child { border-radius: 4px; }
+.splitbar__pct { display: flex; justify-content: space-between; font-size: 12.5px; }
+.champbars--split li { align-items: start; }
+.splitbar__pct .wr { font-size: 13px; }

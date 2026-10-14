@@ -278,15 +278,17 @@ const barRows = (groups) => {
       <span class="wrbars__value">${g.winrate}% <small>(${g.games})</small></span>
     </li>`).join('')}</ul>`;
 };
-const champList = (list, champs, base = 50, empty = 'För få matcher.') => (list.length
-  ? `<ul class="champbars">${list.map((c) => `
+/** Vinst och förlust som en delad stapel: blått = vinster, orange = förluster. */
+const splitList = (list, champs, empty = 'För få matcher.') => (list.length
+  ? `<ul class="champbars champbars--split">${list.map((c) => `
       <li>
         ${champIcon(champs, c.championId)}
         <span class="champbars__main">
-          <span><span class="opponents__name">${esc(champs.name(c.championId))}</span> <small class="muted">· ${c.games} st</small></span>
-          ${divBar(c.winrate, base)}
+          <span class="champbars__head"><span><span class="opponents__name">${esc(champs.name(c.championId))}</span> <small class="muted">· ${c.games} matcher</small></span>
+            <small class="muted">${c.wins} V – ${c.losses} F</small></span>
+          <span class="splitbar" role="img" aria-label="${c.winrate} % vinst, ${100 - c.winrate} % förlust">${c.wins ? `<i class="is-good" style="flex:${c.wins}"></i>` : ''}${c.losses ? `<i class="is-bad" style="flex:${c.losses}"></i>` : ''}</span>
+          <span class="splitbar__pct"><span class="wr wr--good">${c.winrate}% vinst</span><span class="wr wr--bad">${100 - c.winrate}% förlust</span></span>
         </span>
-        <span class="wr ${c.winrate >= base ? 'wr--good' : 'wr--bad'}">${c.winrate}%</span>
       </li>`).join('')}</ul>`
   : `<p class="empty">${empty}</p>`);
 
@@ -322,12 +324,10 @@ export function earlyHtml(rep) {
 export function synergyHtml(rep, champs) {
   if (!rep) return '';
   return `
-    <p class="card__hint">Champions med minst ${rep.minGames} matcher · staplarna utgår från din vinst totalt (${rep.baseline} %)</p>
+    <p class="card__hint">Flest matcher först · <span class="sw is-win"></span> vinst <span class="sw is-loss"></span> förlust · din vinst totalt ${rep.baseline} %</p>
     <div class="split">
-      <div><h3 class="sub">Bäst med</h3>${champList(rep.bestAllies, champs, rep.baseline)}</div>
-      <div><h3 class="sub">Sämst med</h3>${champList(rep.worstAllies, champs, rep.baseline)}</div>
-      <div><h3 class="sub">Lättast mot</h3>${champList(rep.easiestEnemies, champs, rep.baseline)}</div>
-      <div><h3 class="sub">Svårast mot</h3>${champList(rep.hardestEnemies, champs, rep.baseline)}</div>
+      <div><h3 class="sub">Mest med</h3>${splitList(rep.mostAllies, champs)}</div>
+      <div><h3 class="sub">Mest mot</h3>${splitList(rep.mostEnemies, champs)}</div>
     </div>`;
 }
 
