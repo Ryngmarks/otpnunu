@@ -4,6 +4,7 @@
 // Hemligheter (Supabase → Edge Functions → Secrets):
 //   RIOT_API_KEY      Riot-nyckeln (krävs)
 //   NUNU_SERVICE_KEY  valfri: egen sb_secret_-nyckel om SUPABASE_SERVICE_ROLE_KEY saknas
+//   NUNU_CRON_SECRET  valfri: hemlighet för schemalagd synk (.github/workflows/nunu-sync.yml)
 // SUPABASE_URL och SUPABASE_SERVICE_ROLE_KEY sätts automatiskt av Supabase.
 import { createHandler, createGetUser } from './handler.mjs';
 import { createRiot } from './riot.mjs';
@@ -14,6 +15,7 @@ const serviceKey = Deno.env.get('NUNU_SERVICE_KEY') || Deno.env.get('SUPABASE_SE
 
 const handler = createHandler({
   getUser: createGetUser({ url, apiKey: serviceKey }),
+  cronSecret: Deno.env.get('NUNU_CRON_SECRET') ?? '',
   makeDeps: () => ({
     riot: createRiot({ apiKey: Deno.env.get('RIOT_API_KEY') ?? '' }),
     db: createDb({ url, serviceKey }),

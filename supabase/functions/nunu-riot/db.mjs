@@ -75,6 +75,9 @@ export function createDb({ url, serviceKey, fetchImpl = fetch }) {
       return row || null;
     },
 
+    /** Alla kopplade konton (schemalagd synk). */
+    listAllAccounts: () => call('riot_account?select=*&order=linked_at.asc'),
+
     listAccounts: (profileId) =>
       call(`riot_account?select=*&profile_id=eq.${enc(profileId)}&order=linked_at.asc`),
 

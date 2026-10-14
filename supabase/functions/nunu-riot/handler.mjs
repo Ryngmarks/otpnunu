@@ -3,6 +3,7 @@
  *
  *   POST { action: 'link', riotId: 'Namn#Tagg', platform?: 'euw1' }
  *   POST { action: 'sync', puuid?: '…' }          (utan puuid: alla egna konton)
+ *   POST { action: 'sync-all' } + header x-nunu-cron (schemalagd synk, alla konton)
  *
  * Kräver inloggad användare (Supabase-token i Authorization) som finns i nunu.member.
  * Allt Deno-/Supabase-specifikt ligger i index.ts – här bara webbstandard (Request/Response).
@@ -22,11 +23,34 @@ function cors(origin) {
   };
 }
 
+/** Jämför två strängar på konstant tid (så att hemligheten inte kan gissas via svarstiden). */
+export function safeEqual(a, b) {
+  const x = String(a);
+  const y = String(b);
+  let diff = x.length ^ y.length;
+  for (let i = 0; i < Math.max(x.length, y.length); i++) diff |= (x.charCodeAt(i) || 0) ^ (y.charCodeAt(i) || 0);
+  return diff === 0;
+}
+
+/** Synkar konton i tur och ordning. Ber Riot oss vänta tas resten nästa gång. */
+async function syncAccounts({ riot, db, accounts }) {
+  const results = [];
+  for (const account of accounts) {
+    const r = await syncAccount({ riot, db, account });
+    results.push(r);
+    if (r.retryAfter) break;
+  }
+  const retryAfter = results.reduce((m, r) => Math.max(m, r.retryAfter || 0), 0) || null;
+  const done = results.length === accounts.length && results.every((r) => r.done);
+  return { results, done, retryAfter };
+}
+
 /**
  * getUser(token) → { id, email } | null
  * makeDeps()     → { riot, db }
+ * cronSecret     → hemlighet för schemalagd synk (NUNU_CRON_SECRET); tom = avstängd
  */
-export function createHandler({ getUser, makeDeps, log = console.error }) {
+export function createHandler({ getUser, makeDeps, cronSecret = '', log = console.error }) {
   return async function handle(req) {
     const headers = { ...cors(req.headers.get('origin')), 'Content-Type': 'application/json' };
     const reply = (status, body) => new Response(JSON.stringify(body), { status, headers });
@@ -35,6 +59,17 @@ export function createHandler({ getUser, makeDeps, log = console.error }) {
     if (req.method !== 'POST') return reply(405, { error: 'Bara POST' });
 
     try {
+      // Schemalagd synk (GitHub Actions): ingen användare, i stället en delad hemlighet
+      const cron = req.headers.get('x-nunu-cron');
+      if (cron !== null) {
+        if (cronSecret.length < 32 || !safeEqual(cron, cronSecret)) throw new HttpError(401, 'Fel eller avstängd synk-hemlighet');
+        let body;
+        try { body = await req.json(); } catch { throw new HttpError(400, 'Ogiltig JSON'); }
+        if (body.action !== 'sync-all') throw new HttpError(400, 'Okänd action');
+        const { riot, db } = makeDeps();
+        return reply(200, await syncAccounts({ riot, db, accounts: await db.listAllAccounts() }));
+      }
+
       const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
       const user = token ? await getUser(token) : null;
       if (!user) throw new HttpError(401, 'Inte inloggad');
@@ -57,15 +92,7 @@ export function createHandler({ getUser, makeDeps, log = console.error }) {
           accounts = accounts.filter((a) => a.puuid === body.puuid);
           if (!accounts.length) throw new HttpError(404, 'Kontot finns inte i din profil');
         }
-        const results = [];
-        for (const account of accounts) {
-          const r = await syncAccount({ riot, db, account });
-          results.push(r);
-          if (r.retryAfter) break; // Riot vill att vi väntar – resten tas nästa gång
-        }
-        const retryAfter = results.reduce((m, r) => Math.max(m, r.retryAfter || 0), 0) || null;
-        const done = results.length === accounts.length && results.every((r) => r.done);
-        return reply(200, { results, done, retryAfter });
+        return reply(200, await syncAccounts({ riot, db, accounts }));
       }
 
       throw new HttpError(400, 'Okänd action');

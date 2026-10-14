@@ -19,6 +19,7 @@ export function memoryDb({ members = ['user-1', 'user-2'] } = {}) {
       return p;
     },
     getAccount: async (puuid) => t.riot_account.find((a) => a.puuid === puuid) || null,
+    listAllAccounts: async () => [...t.riot_account],
     listAccounts: async (profileId) => t.riot_account.filter((a) => a.profile_id === profileId),
     upsertAccount: async (row) => {
       const a = t.riot_account.find((x) => x.puuid === row.puuid);

@@ -215,17 +215,18 @@ test('sync: Riot ber oss vänta – det som hämtats sparas och synken fortsätt
 
 /* ---------------- HTTP ---------------- */
 
-function handlerWith({ db = memoryDb(), fake = fakeRiot({ history: { [P1]: 5, [P2]: 0 } }), users = { 'tok-1': 'user-1', 'tok-3': 'user-3' } } = {}) {
+function handlerWith({ db = memoryDb(), fake = fakeRiot({ history: { [P1]: 5, [P2]: 0 } }), users = { 'tok-1': 'user-1', 'tok-3': 'user-3' }, cronSecret = '' } = {}) {
   const errors = [];
   const handle = createHandler({
+    cronSecret,
     getUser: async (token) => (users[token] ? { id: users[token] } : null),
     makeDeps: () => ({ riot: riotWith(fake), db }),
     log: (e) => errors.push(e),
   });
-  const call = (body, { token = 'tok-1', origin = 'https://ryngmarks.github.io', method = 'POST' } = {}) =>
+  const call = (body, { token = 'tok-1', origin = 'https://ryngmarks.github.io', method = 'POST', cron } = {}) =>
     handle(new Request('https://x.supabase.co/functions/v1/nunu-riot', {
       method,
-      headers: { origin, ...(token ? { authorization: `Bearer ${token}` } : {}), 'content-type': 'application/json' },
+      headers: { origin, ...(token ? { authorization: `Bearer ${token}` } : {}), ...(cron !== undefined ? { 'x-nunu-cron': cron } : {}), 'content-type': 'application/json' },
       body: method === 'POST' ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined,
     }));
   return { call, db, errors };
@@ -419,4 +420,38 @@ test('ny Riot-nyckel: koppla om ett konto med gammalt PUUID byter PUUID i ställ
   assert.equal(r.already_linked, true);
   assert.equal(db.t.riot_account.length, 1);
   assert.deepEqual([db.t.riot_account[0].puuid, db.t.riot_account[0].previous_puuids], [P1, [OLD]]);
+});
+
+test('http: schemalagd synk med hemlighet synkar alla konton', async () => {
+  const SECRET = 'c'.repeat(40);
+  const db = memoryDb();
+  const fake = fakeRiot({ history: { [P1]: 5, [PX]: 5 } });
+  const riot = riotWith(fake);
+  await linkAccount({ riot, db, userId: 'user-1', riotId: 'Rymm3n#EUW' });
+  await linkAccount({ riot, db, userId: 'user-2', riotId: 'Annan#EUW' });
+  const { call } = handlerWith({ db, fake, cronSecret: SECRET });
+
+  const ok = await call({ action: 'sync-all' }, { token: null, cron: SECRET });
+  assert.equal(ok.status, 200);
+  const body = await ok.json();
+  assert.equal(body.done, true);
+  assert.equal(body.results.length, 2, 'båda användarnas konton');
+  assert.equal(db.t.account_match.size, 10);
+
+  assert.equal((await call({ action: 'sync-all' }, { token: null, cron: 'fel' })).status, 401);
+  assert.equal((await call({ action: 'sync-all' }, { token: null, cron: '' })).status, 401);
+  assert.equal((await call({ action: 'link', riotId: 'X#Y' }, { token: null, cron: SECRET })).status, 400, 'bara sync-all');
+  assert.equal((await call({ action: 'sync-all' })).status, 400, 'utan hemlighet: vanlig användare, okänd action');
+  const off = handlerWith({ db, fake, cronSecret: '' });
+  assert.equal((await off.call({ action: 'sync-all' }, { token: null, cron: '' })).status, 401, 'avstängd utan hemlighet');
+  const short = handlerWith({ db, fake, cronSecret: 'kort' });
+  assert.equal((await short.call({ action: 'sync-all' }, { token: null, cron: 'kort' })).status, 401, 'för kort hemlighet godtas inte');
+});
+
+test('safeEqual', async () => {
+  const { safeEqual } = await import('../../functions/nunu-riot/handler.mjs');
+  assert.equal(safeEqual('abc', 'abc'), true);
+  assert.equal(safeEqual('abc', 'abd'), false);
+  assert.equal(safeEqual('abc', 'abcd'), false);
+  assert.equal(safeEqual('', ''), true);
 });

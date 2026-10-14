@@ -263,3 +263,10 @@ Riot krypterar PUUID olika för varje nyckel (projekt). Med en ny nyckel svarar 
 sparade PUUID. Synken löser det själv: kontot slås upp på nytt via Riot ID och får sitt nya PUUID;
 matcher, mastery och dödsfall följer med (`004_rekey.sql`, *on update cascade*). Det gamla PUUID sparas i
 `riot_account.previous_puuids`, eftersom äldre rådata och tidslinjer innehåller det.
+
+## Automatisk synk
+
+GitHub Actions (`nunu-sync.yml`) varje timme → `nunu-riot` med `{ action: 'sync-all' }` och headern
+`x-nunu-cron`, som jämförs med funktionens `NUNU_CRON_SECRET` (minst 32 tecken, jämförelse på konstant tid).
+Synkar alla konton, 20 matcher per konto och anrop, och anropar igen tills allt är klart (högst 30 varv).
+Synka-knappen på sidan finns kvar för den allra senaste matchen.

@@ -1,0 +1,40 @@
+# Nunu – schemalagd synk varje timme: nya matcher, tidslinjer och mastery för alla kopplade konton.
+# Anropar Edge Function nunu-riot med hemligheten NUNU_CRON_SECRET (samma i GitHub och i funktionen –
+# nunu-ci.yml lägger in den i Supabase vid driftsättning). Saknas hemligheten hoppas synken över.
+#
+# Schemalagda körningar använder filen på repots standardgren. GitHub pausar schemat om repot
+# inte haft någon aktivitet på 60 dagar – starta då igen under Actions.
+name: Nunu – synk varje timme
+
+on:
+  schedule:
+    - cron: '17 * * * *'   # varje timme, 17 minuter över
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nunu-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Synka alla konton
+        env:
+          NUNU_CRON_SECRET: ${{ secrets.NUNU_CRON_SECRET }}
+        run: |
+          if [ -z "$NUNU_CRON_SECRET" ]; then
+            echo "NUNU_CRON_SECRET saknas – schemalagd synk är avstängd."
+            exit 0
+          fi
+          node tools/cron-sync.mjs

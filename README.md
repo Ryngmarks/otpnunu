@@ -40,6 +40,14 @@ Supabase Storage (privat bucket `timelines`) – ~50 MB för hela historiken. Ur
 10/14/20 minuter och varje dödsfall (när, var, av vem) fram och sparas i databasen; appen visar det
 i kortet **Skada och dödsfall**. Matcher som synkades innan dess räknas om automatiskt vid nästa synk.
 
+## Automatisk synk varje timme
+
+`.github/workflows/nunu-sync.yml` anropar Edge Function `nunu-riot` varje timme (17 minuter över)
+och synkar alla kopplade konton: nya matcher, tidslinjer och mastery. Den använder hemligheten
+`NUNU_CRON_SECRET` (minst 32 tecken), som ligger i GitHub och läggs in i funktionen vid
+driftsättning. Utan hemligheten är den schemalagda synken avstängd. Kan också startas för hand under
+*Actions → Nunu – synk varje timme → Run workflow*.
+
 ## Tester
 
 ```bash
