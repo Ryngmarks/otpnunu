@@ -628,6 +628,50 @@ export function impactReport(rows) {
   };
 }
 
+/* ---------------- Motion graph (Översikt) ---------------- */
+
+/**
+ * Rullande snitt över tid för fyra nyckeltal: vinst %, kills per match, KDA och guld mot
+ * motståndarens jungler vid 10 min. Äldst först. Varje punkt har n = antal matcher bakom värdet.
+ * Totalen räknas på alla matcher; saknas data blir värdet null.
+ */
+export function trendSeries(rows, { window: win } = {}) {
+  const games = [...rows].sort((a, b) => String(a.game_start).localeCompare(String(b.game_start)));
+  const w = win || Math.min(20, Math.max(5, Math.floor(games.length / 4)));
+  const metrics = {
+    winrate: (list) => (list.length ? round((list.filter((r) => r.win).length / list.length) * 100, 0) : null),
+    kills: (list) => (list.length ? round(mean(list.map((r) => Number(r.kills) || 0)), 1) : null),
+    kda: (list) => {
+      if (!list.length) return null;
+      const sum = (f) => list.reduce((t, r) => t + (Number(r[f]) || 0), 0);
+      return round((sum('kills') + sum('assists')) / Math.max(1, sum('deaths')), 2);
+    },
+    goldDiff10: (list) => {
+      const xs = list.map((r) => diffAt(r, 10, 'gold')).filter((x) => x != null);
+      return xs.length ? round(mean(xs), 0) : null;
+    },
+  };
+  const counts = { goldDiff10: (list) => list.filter((r) => diffAt(r, 10, 'gold') != null).length };
+  const series = {};
+  for (const [key, f] of Object.entries(metrics)) {
+    series[key] = [];
+    if (games.length < w) continue;
+    for (let i = w - 1; i < games.length; i++) {
+      const slice = games.slice(i - w + 1, i + 1);
+      const v = f(slice);
+      if (v != null) series[key].push({ i, t: games[i].game_start, v, n: counts[key] ? counts[key](slice) : slice.length });
+    }
+  }
+  const totals = Object.fromEntries(Object.entries(metrics).map(([k, f]) => [k, f(games)]));
+  return {
+    games: games.length,
+    window: w,
+    totals,
+    n: { winrate: games.length, kills: games.length, kda: games.length, goldDiff10: counts.goldDiff10(games) },
+    series,
+  };
+}
+
 /* ---------------- Elo (rank-historik, nunu.rank_snapshot) ---------------- */
 
 export const TIERS = ['IRON', 'BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'EMERALD', 'DIAMOND', 'MASTER', 'GRANDMASTER', 'CHALLENGER'];

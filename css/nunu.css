@@ -655,3 +655,56 @@ body.is-locked .bg {
 .lib-editor__hint { margin: 0; }
 .seg.is-disabled { opacity: .45; }
 .seg button:disabled { cursor: not-allowed; }
+
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* ---------- Motion graph (Översikt) ----------
+   Skin-bilder som tonar över i varandra, siffran räknas upp och linjen ritas fram. */
+.motion { margin-bottom: 14px; border-radius: 22px; overflow: hidden; border: 1px solid var(--line); box-shadow: 0 24px 60px -30px rgba(79, 180, 255, .45); }
+.motion__stage { position: relative; isolation: isolate; height: 330px; background: #0b1129; }
+@media (min-width: 720px) { .motion__stage { height: 360px; } }
+.motion__skin { position: absolute; inset: 0; z-index: -2; background: center 30% / cover no-repeat; opacity: 0; transform: scale(1.1); transition: opacity 1.4s var(--ease); }
+.motion__skin.is-on { opacity: 1; animation: motion-kenburns 9s ease-out forwards; }
+@keyframes motion-kenburns { from { transform: scale(1.12) translate(1.5%, 1%); } to { transform: scale(1.02) translate(0, 0); } }
+.motion__shade { position: absolute; inset: 0; z-index: -1; background:
+  linear-gradient(90deg, rgba(8, 12, 28, .92) 0%, rgba(8, 12, 28, .6) 42%, rgba(8, 12, 28, .12) 100%),
+  linear-gradient(0deg, rgba(8, 12, 28, .96) 0%, rgba(8, 12, 28, .55) 38%, transparent 62%); }
+.motion__text { position: absolute; top: 18px; left: 18px; right: 18px; }
+.motion__eyebrow { font-size: 12px; }
+.motion__value { margin: 4px 0 2px; font: 700 clamp(52px, 12vw, 76px)/1 var(--font-display); letter-spacing: .01em; text-shadow: 0 4px 24px rgba(0, 0, 0, .7); font-variant-numeric: tabular-nums; }
+.motion__sub { margin: 0; font-size: 13px; color: var(--text); opacity: .85; text-shadow: 0 1px 8px rgba(0, 0, 0, .9); }
+.motion__chart { position: absolute; left: 14px; right: 18px; bottom: 52px; height: 40%; touch-action: pan-y; }
+.motion__chart svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.motion__line { fill: none; stroke: var(--ice); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; filter: drop-shadow(0 0 6px rgba(143, 211, 255, .7)); }
+.motion__area { opacity: 1; }
+.motion__ref { stroke: rgba(238, 244, 255, .35); stroke-width: 1; stroke-dasharray: 4 5; vector-effect: non-scaling-stroke; }
+.motion__cross { stroke: rgba(238, 244, 255, .5); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.motion__chart.is-drawing .motion__line { animation: motion-draw 1.6s var(--ease) both; }
+.motion__chart.is-drawing .motion__area { animation: motion-fade 1.2s .6s ease-out both; }
+.motion__chart.is-drawing .motion__dot { animation: motion-pop .4s 1.5s var(--ease) both; }
+@keyframes motion-draw { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+@keyframes motion-fade { from { opacity: 0; } }
+@keyframes motion-pop { from { opacity: 0; transform: translate(-50%, -50%) scale(0); } }
+.motion__dot { position: absolute; width: 12px; height: 12px; border-radius: 50%; background: var(--ice); border: 2px solid #0b1129; transform: translate(-50%, -50%); box-shadow: 0 0 0 0 rgba(143, 211, 255, .6); }
+.motion__dot::after { content: ''; position: absolute; inset: -2px; border-radius: 50%; border: 2px solid var(--ice); animation: motion-ping 2s 2s ease-out infinite; }
+@keyframes motion-ping { from { transform: scale(1); opacity: .8; } to { transform: scale(3); opacity: 0; } }
+.motion__reflabel { position: absolute; right: 10px; transform: translateY(-130%); font-size: 11px; color: var(--muted); }
+.motion__tip { position: absolute; top: -8px; z-index: 2; display: grid; gap: 1px; padding: 6px 10px; border-radius: 10px; background: rgba(6, 10, 26, .9); border: 1px solid var(--line); transform: translate(-50%, -100%); white-space: nowrap; pointer-events: none; font-size: 12px; }
+.motion__tip.is-left { transform: translate(-100%, -100%); }
+.motion__tip b { font: 700 18px var(--font-display); }
+.motion__tip span { color: var(--muted); }
+.motion__nav { position: absolute; left: 12px; right: 12px; bottom: 10px; display: flex; align-items: center; gap: 8px; }
+.motion__play { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: rgba(6, 10, 26, .7); border: 1px solid rgba(255, 255, 255, .15); font-size: 11px; letter-spacing: -1px; }
+.motion__play::before { content: '❚❚'; }
+.motion__play.is-paused::before { content: '▶'; letter-spacing: 0; }
+.motion__step { flex: 1 1 0; min-width: 0; display: grid; gap: 5px; padding: 4px 0; text-align: left; color: var(--muted); }
+.motion__step span { font: 700 12px var(--font-display); letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.motion__step i { position: relative; display: block; height: 3px; border-radius: 3px; background: rgba(238, 244, 255, .2); overflow: hidden; }
+.motion__step.is-on { color: var(--text); }
+.motion__step.is-on i::after { content: ''; position: absolute; inset: 0; background: var(--ice); transform-origin: left; animation: motion-progress 7s linear both; }
+.motion.is-paused .motion__step.is-on i::after, .is-paused .motion__step.is-on i::after { animation: none; transform: none; }
+@keyframes motion-progress { from { transform: scaleX(0); } }
+@media (prefers-reduced-motion: reduce) {
+  .motion__skin.is-on { animation: none; transform: none; }
+  .motion__dot::after { animation: none; }
+}

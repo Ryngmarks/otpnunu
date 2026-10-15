@@ -320,3 +320,12 @@ Gemensam motor i `js/career/stats.js`, används av Live Scout, Champion Library 
 `championTally` → `scoutTable` (färg/underlag) → `libraryTable` (Solo/Duo, Flex, Normal per champion)
 och `championProfile` (detaljer för en champion och relation). Egna bedömningar ligger i
 `nunu.champion_opinion` (en rad per champion och relation: opinion, note, strategy).
+
+## Motion graph (Översikt)
+
+Överst i Översikt: skin-bilderna (`assets/skins/`) tonar över i varandra medan en linje ritas upp för
+ett nyckeltal i taget – vinst %, kills per match, KDA och guld mot motståndarens jungler vid 10 min.
+Stora siffran är totalen för filtren ovan; linjen är ett rullande snitt (5–20 matcher beroende på hur
+många som finns), äldst till vänster. Hovra/peka för värdet och antal matcher bakom varje punkt.
+Kan pausas, rör sig inte vid "minska rörelse", och data finns även som tabell för skärmläsare.
+Beräkning: `trendSeries` i `js/career/stats.js`; animation: `js/career/motion.js`.

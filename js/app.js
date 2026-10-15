@@ -3,7 +3,8 @@
  */
 import { createApi, ApiError } from './core/api.js';
 import { loadChampions } from './core/ddragon.js';
-import { NUNU, QUEUE_FILTERS, filterMatches, summarize, recentForm, byAccount, opponents, masterySummary, careerSummary, damageReport, gankReport, earlyReport, synergyReport, matchupReport, impactReport, eloSeries, overviewKpis, insights, scoutTable, scoutPicks, libraryTable, championProfile, junglerRows } from './career/stats.js';
+import { NUNU, QUEUE_FILTERS, filterMatches, summarize, recentForm, byAccount, opponents, masterySummary, careerSummary, damageReport, gankReport, earlyReport, synergyReport, matchupReport, impactReport, eloSeries, overviewKpis, insights, trendSeries, scoutTable, scoutPicks, libraryTable, championProfile, junglerRows } from './career/stats.js';
+import { mountMotion } from './career/motion.js';
 import { esc, heroHtml, tilesHtml, formHtml, accountsHtml, opponentsHtml, matchesHtml, careerHtml, damageHtml, gankHtml, earlyHtml, synergyHtml, matchupHtml, impactHtml, eloHtml, kpisHtml, insightsHtml, goldLineHtml, scoutHtml, scoutPickHtml, libraryHtml, championDetailHtml, championEditorHtml } from './career/view.js';
 
 const $ = (s) => document.querySelector(s);
@@ -102,6 +103,8 @@ function render() {
 
   // Översikt
   $('[data-kpis]').innerHTML = kpisHtml(overviewKpis(rows));
+  // Startar bara om animationen när filtren eller matcherna ändras
+  mountMotion($('[data-motion]'), trendSeries(rows), `${f.champion}|${f.queue}|${f.account}|${rows.length}|${rows[0] ? rows[0].match_id : ''}`);
   $('[data-insights]').innerHTML = insightsHtml(insights(rows), state.champs);
   $('[data-elo]').innerHTML = eloHtml(eloSeries(state.ranks, state.accounts));
   const goldLine = goldLineHtml(earlyReport(rows));

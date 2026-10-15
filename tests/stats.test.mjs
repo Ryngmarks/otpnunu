@@ -450,3 +450,25 @@ test('Champion Library: jungler-filtret räknar bara motståndarens jungler', as
   // Utan filtret: alla möten
   assert.equal(s.libraryTable(rows, [], 'against').list.find((e) => e.championId === 64).solo.games, 4);
 });
+
+test('trendSeries: rullande snitt äldst först, med antal matcher bakom varje punkt', async () => {
+  const s = await import('../js/career/stats.js');
+  const early = (gold, opp) => ({ me: { 10: { gold } }, opp: { 10: { gold: opp } } });
+  const rows = Array.from({ length: 8 }, (_, i) => ({
+    game_start: `2026-02-0${i + 1}`, win: i >= 4, kills: i, deaths: 1, assists: 1,
+    early: i % 2 ? early(4000, 3800) : null,
+  })).reverse(); // som från databasen: nyast först
+  const t = s.trendSeries(rows, { window: 4 });
+  assert.equal(t.games, 8);
+  assert.deepEqual(t.series.winrate.map((p) => p.v), [0, 25, 50, 75, 100]);
+  assert.equal(t.series.winrate[0].n, 4);
+  assert.equal(t.series.kills[4].v, 5.5);
+  assert.deepEqual(t.series.goldDiff10.map((p) => [p.v, p.n]), [[200, 2], [200, 2], [200, 2], [200, 2], [200, 2]]);
+  assert.deepEqual(t.totals, { winrate: 50, kills: 3.5, kda: 4.5, goldDiff10: 200 });
+  assert.equal(t.n.goldDiff10, 4);
+  // För få matcher: inga punkter, totalen finns ändå
+  const few = s.trendSeries(rows.slice(0, 3), { window: 4 });
+  assert.equal(few.series.winrate.length, 0);
+  assert.equal(few.totals.winrate, 100);
+  assert.equal(s.trendSeries([]).totals.kda, null);
+});
