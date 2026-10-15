@@ -3,12 +3,18 @@
  * Riot visar matchen först när den laddats in (inte under champ select) och ger inga positioner –
  * motståndarens jungler känns igen på Smite.
  */
+import { RateLimitError } from './riot.mjs';
+
 export const SMITE = 11;
 
 /** Kort sammanfattning ur kontots perspektiv. null om kontot inte är med. Inga PUUID för andra spelare. */
 export function summarizeLive(game, account) {
   const parts = Array.isArray(game?.participants) ? game.participants : [];
-  const me = parts.find((p) => p.puuid === account.puuid);
+  // Riot ID som reserv: PUUID kan saknas eller skilja sig (t.ex. annan Riot-nyckel)
+  const riotId = account.game_name ? `${account.game_name}#${account.tag_line || ''}`.toLowerCase() : null;
+  const me = parts.find((p) => p.puuid && p.puuid === account.puuid)
+    || parts.find((p) => riotId && String(p.riotId || '').toLowerCase() === riotId)
+    || parts.find((p) => account.game_name && String(p.riotId || '').split('#')[0].toLowerCase() === account.game_name.toLowerCase());
   if (!me) return null;
   const player = (p) => {
     const spells = [p.spell1Id, p.spell2Id].map(Number).filter(Boolean);
@@ -44,12 +50,31 @@ export function summarizeLive(game, account) {
   };
 }
 
-/** Letar efter en pågående match på kontona i tur och ordning. Första träffen vinner. */
-export async function findLiveGame({ riot, accounts }) {
+/**
+ * Letar efter en pågående match på kontona i tur och ordning. Första träffen vinner.
+ * checks: vad Riot svarade per konto – visas i appen så att det går att felsöka.
+ */
+export async function findLiveGame({ riot, accounts, log = () => {} }) {
+  const checks = [];
   for (const account of accounts) {
-    const game = await riot.activeGame(account.platform, account.puuid);
-    const live = game ? summarizeLive(game, account) : null;
-    if (live) return live;
+    const check = { name: account.game_name, platform: account.platform, result: 'ingen match' };
+    checks.push(check);
+    try {
+      const game = await riot.activeGame(account.platform, account.puuid);
+      if (!game) continue;
+      const live = summarizeLive(game, account);
+      if (live) {
+        check.result = 'match';
+        return { live, checks };
+      }
+      // Riot hittade en match men vi kände inte igen kontot bland spelarna
+      check.result = 'match utan kontot';
+      log({ live: 'unmatched', account: account.game_name, participants: (game.participants || []).length });
+    } catch (err) {
+      if (err instanceof RateLimitError) throw err;
+      check.result = `fel ${err.riotStatus || err.status || ''}`.trim();
+      check.message = err.message;
+    }
   }
-  return null;
+  return { live: null, checks };
 }

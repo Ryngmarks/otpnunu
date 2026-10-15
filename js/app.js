@@ -244,7 +244,7 @@ function renderLive(rows) {
   }
   const idle = $('[data-live-idle]');
   idle.hidden = !!live;
-  if (!live) idle.innerHTML = liveIdleHtml({ busy: state.live.busy, checkedAt: state.live.checkedAt, accounts: state.accounts.length, error: state.live.error });
+  if (!live) idle.innerHTML = liveIdleHtml({ busy: state.live.busy, checkedAt: state.live.checkedAt, accounts: state.accounts.length, error: state.live.error, checks: state.live.checks || [] });
   if (!live) return;
   const tables = { with: scoutTable(rows, state.opinions, 'with'), against: scoutTable(rows, state.opinions, 'against') };
   box.innerHTML = liveHtml(live, state.champs, tables);
@@ -273,6 +273,7 @@ async function checkLive(manual = false) {
   try {
     const r = await api.live();
     state.live.error = '';
+    state.live.checks = r.checks || [];
     const was = state.live.data;
     state.live.data = r.live || null;
     state.live.checkedAt = Date.now();

@@ -604,3 +604,26 @@ test('live: action live letar på alla egna konton och svarar null utan match', 
   assert.equal(found.body.live.enemyJungler, 64);
   assert.equal(found.body.live.account.name, 'Rymm3n');
 });
+
+test('live: kontot hittas via Riot ID när PUUID saknas, och varje konto rapporteras', async () => {
+  const { summarizeLive, findLiveGame } = await import('../../functions/nunu-riot/live.mjs');
+  const { liveGameJson } = await import('../../../tests/helpers/fake-riot.mjs');
+  const g = liveGameJson();
+  g.participants.forEach((p) => { delete p.puuid; });
+  const l = summarizeLive(g, { puuid: P1, game_name: 'Rymm3n', tag_line: 'EUW' });
+  assert.equal(l.me.championId, 20, 'via Riot ID');
+  const accounts = [
+    { puuid: P2, game_name: 'Smurf', tag_line: 'EUW', platform: 'euw1' },
+    { puuid: 'trasig', game_name: 'Trasig', tag_line: 'EUW', platform: 'euw1' },
+    { puuid: P1, game_name: 'Rymm3n', tag_line: 'EUW', platform: 'euw1' },
+  ];
+  const riot = {
+    activeGame: async (platform, puuid) => {
+      if (puuid === 'trasig') { const e = new HttpError(502, 'Riot svarade 400'); e.riotStatus = 400; throw e; }
+      return puuid === P1 ? g : null;
+    },
+  };
+  const r = await findLiveGame({ riot, accounts });
+  assert.equal(r.live.me.championId, 20, 'ett fel på ett konto stoppar inte de andra');
+  assert.deepEqual(r.checks.map((c) => c.result), ['ingen match', 'fel 400', 'match']);
+});

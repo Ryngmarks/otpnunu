@@ -936,3 +936,4 @@ body.is-locked .bg {
 .live-idle__text { flex: 1 1 auto; min-width: 0; }
 .live-idle__btn { flex: none; padding: 6px 12px; border-radius: 999px; border: 1px solid rgba(255, 93, 108, .5); color: #ff9aa4; font: 700 13px var(--font-display); letter-spacing: .08em; text-transform: uppercase; }
 .live-idle__btn:hover { background: rgba(255, 93, 108, .12); }
+.live-idle__detail { display: block; margin-top: 2px; color: #ffb48a; }

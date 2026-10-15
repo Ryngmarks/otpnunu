@@ -101,7 +101,8 @@ export function createHandler({ getUser, makeDeps, cronSecret = '', log = consol
         const profile = await db.ensureProfile(user.id);
         const accounts = await db.listAccounts(profile.id);
         try {
-          return reply(200, { live: await findLiveGame({ riot, accounts }), checked: accounts.length });
+          const { live, checks } = await findLiveGame({ riot, accounts, log });
+          return reply(200, { live, checked: accounts.length, checks });
         } catch (err) {
           if (err instanceof RateLimitError) return reply(200, { live: null, checked: 0, retryAfter: err.retryAfter });
           throw err;
