@@ -89,6 +89,12 @@ export function createRiot({
     accountByRiotId: (region, gameName, tagLine) =>
       get(`${regional(region)}/riot/account/v1/accounts/by-riot-id/${enc(gameName)}/${enc(tagLine)}`, { allow404: true }),
 
+    /** Vilken server (platform) kontot spelar League på, t.ex. 'euw1'. null om okänt. */
+    accountRegion: async (region, puuid) => {
+      const r = await get(`${regional(region)}/riot/account/v1/region/by-game/lol/by-puuid/${enc(puuid)}`, { allow404: true });
+      return r && r.region ? String(r.region).toLowerCase() : null;
+    },
+
     accountByPuuid: (region, puuid) =>
       get(`${regional(region)}/riot/account/v1/accounts/by-puuid/${enc(puuid)}`, { allow404: true }),
 

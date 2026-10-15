@@ -627,3 +627,25 @@ test('live: kontot hittas via Riot ID när PUUID saknas, och varje konto rapport
   assert.equal(r.live.me.championId, 20, 'ett fel på ett konto stoppar inte de andra');
   assert.deepEqual(r.checks.map((c) => c.result), ['ingen match', 'fel 400', 'match']);
 });
+
+test('live: djupkontroll hittar matchen på rätt server och sparar den', async () => {
+  const { findLiveGame } = await import('../../functions/nunu-riot/live.mjs');
+  const { liveGameJson } = await import('../../../tests/helpers/fake-riot.mjs');
+  const fixed = [];
+  const calls = [];
+  const riot = {
+    activeGame: async (platform, puuid) => { calls.push(platform); return platform === 'eun1' && puuid === P1 ? liveGameJson() : null; },
+    accountByRiotId: async () => ({ puuid: P1 }),
+    accountRegion: async () => 'eun1',
+  };
+  const acc = [{ puuid: P1, game_name: 'Rymm3n', tag_line: 'EUW', platform: 'euw1' }];
+  const shallow = await findLiveGame({ riot, accounts: acc });
+  assert.equal(shallow.live, null);
+  const r = await findLiveGame({ riot, accounts: acc, deep: true, fixPlatform: async (a, p) => fixed.push(p) });
+  assert.equal(r.live.enemyJungler, 64);
+  assert.deepEqual(fixed, ['eun1']);
+  assert.match(r.checks[0].detail, /server eun1 \(sparad euw1\)/);
+  const none = await findLiveGame({ riot: { ...riot, accountRegion: async () => 'euw1' }, accounts: acc, deep: true });
+  assert.equal(none.live, null);
+  assert.equal(none.checks[0].detail, 'server euw1 · PUUID stämmer');
+});

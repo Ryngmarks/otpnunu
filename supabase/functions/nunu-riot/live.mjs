@@ -3,7 +3,7 @@
  * Riot visar matchen först när den laddats in (inte under champ select) och ger inga positioner –
  * motståndarens jungler känns igen på Smite.
  */
-import { RateLimitError } from './riot.mjs';
+import { RateLimitError, regionFor } from './riot.mjs';
 
 export const SMITE = 11;
 
@@ -52,17 +52,34 @@ export function summarizeLive(game, account) {
 
 /**
  * Letar efter en pågående match på kontona i tur och ordning. Första träffen vinner.
+ * deep: om Riot säger "ingen match" – slå upp aktuellt PUUID (Riot ID) och vilken server kontot
+ * spelar på, och försök igen. Rättad server sparas via fixPlatform.
  * checks: vad Riot svarade per konto – visas i appen så att det går att felsöka.
  */
-export async function findLiveGame({ riot, accounts, log = () => {} }) {
+export async function findLiveGame({ riot, accounts, deep = false, fixPlatform = async () => {}, log = () => {} }) {
   const checks = [];
   for (const account of accounts) {
     const check = { name: account.game_name, platform: account.platform, result: 'ingen match' };
     checks.push(check);
     try {
-      const game = await riot.activeGame(account.platform, account.puuid);
+      let game = await riot.activeGame(account.platform, account.puuid);
+      let used = account;
+      if (!game && deep && riot.accountRegion) {
+        const region = regionFor(account.platform);
+        const fresh = account.game_name ? await riot.accountByRiotId(region, account.game_name, account.tag_line) : null;
+        const puuid = fresh && fresh.puuid ? fresh.puuid : account.puuid;
+        const platform = (await riot.accountRegion(region, puuid)) || account.platform;
+        const notes = [`server ${platform}${platform !== account.platform ? ` (sparad ${account.platform})` : ''}`];
+        notes.push(puuid !== account.puuid ? 'nytt PUUID från Riot' : 'PUUID stämmer');
+        check.detail = notes.join(' · ');
+        if (platform !== account.platform) await fixPlatform(account, platform);
+        if (puuid !== account.puuid || platform !== account.platform) {
+          used = { ...account, puuid, platform };
+          game = await riot.activeGame(platform, puuid);
+        }
+      }
       if (!game) continue;
-      const live = summarizeLive(game, account);
+      const live = summarizeLive(game, used);
       if (live) {
         check.result = 'match';
         return { live, checks };

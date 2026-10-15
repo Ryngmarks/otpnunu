@@ -271,7 +271,7 @@ async function checkLive(manual = false) {
   state.live.busy = true;
   render();
   try {
-    const r = await api.live();
+    const r = await api.live(manual); // "Kolla nu" gör en djupkontroll (server och PUUID)
     state.live.error = '';
     state.live.checks = r.checks || [];
     const was = state.live.data;

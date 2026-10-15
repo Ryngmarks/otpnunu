@@ -1050,8 +1050,9 @@ export function liveIdleHtml({ busy = false, checkedAt = 0, accounts = 0, error 
         : time ? `Ingen pågående match · kollat ${time} på ${accounts} ${accounts === 1 ? 'konto' : 'konton'} · syns när laddningsskärmen startar`
           : 'Live: kollar strax efter pågående match';
   // Vad Riot svarade per konto – visas när något inte är ett vanligt "ingen match"
-  const odd = checks.filter((c) => c.result !== 'ingen match');
-  const detail = !busy && odd.length ? `<small class="live-idle__detail">${odd.map((c) => `${esc(c.name)}: ${esc(c.result)}${c.message ? ` (${esc(c.message)})` : ''}`).join(' · ')}</small>` : '';
+  // Efter "Kolla nu" (djupkontroll) visas alla konton, annars bara det som avviker
+  const odd = checks.filter((c) => c.result !== 'ingen match' || c.detail);
+  const detail = !busy && odd.length ? `<small class="live-idle__detail">${odd.map((c) => `${esc(c.name)}: ${esc(c.result)}${c.detail ? ` – ${esc(c.detail)}` : ''}${c.message ? ` (${esc(c.message)})` : ''}`).join('<br>')}</small>` : '';
   return `<span class="live-idle__dot ${busy ? 'is-busy' : ''}" aria-hidden="true"></span><span class="live-idle__text">${esc(text)}${detail}</span>
     <button type="button" class="live-idle__btn" data-action="live-check"${busy ? ' disabled' : ''}>Kolla nu</button>`;
 }

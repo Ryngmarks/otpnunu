@@ -163,10 +163,10 @@ export function createApi({ url, key, storage = window.localStorage, fetchImpl =
     deaths: () => all('death?select=puuid,match_id,t_ms,killer_champion_id,helper_champion_ids,places&order=match_id'),
 
     /* ---- Edge Function ---- */
-    live: () => authed(`${root}/functions/v1/nunu-riot`, {
+    live: (deep = false) => authed(`${root}/functions/v1/nunu-riot`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'live' }),
+      body: JSON.stringify({ action: 'live', deep }),
     }),
     riot: (body) => authed(`${root}/functions/v1/nunu-riot`, {
       method: 'POST',
