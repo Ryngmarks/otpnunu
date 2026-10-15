@@ -653,6 +653,50 @@ export function impactReport(rows) {
   };
 }
 
+/* ---------------- Matchgenomgång ---------------- */
+
+export const POSITION_ORDER = ['TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'UTILITY'];
+const byPosition = (a, b) => (POSITION_ORDER.indexOf(a.position) + 1 || 9) - (POSITION_ORDER.indexOf(b.position) + 1 || 9);
+
+/**
+ * Allt för en match i ett format vyn kan rita: lagen per position, kurvor mot motståndaren på din
+ * position, din väg, händelser och objectives. review = account_match.review (kan saknas).
+ */
+export function matchReview(row, review = null) {
+  const team = (ids, positions) => (ids || []).map((id, i) => ({ championId: id, position: positions ? positions[i] || null : null }));
+  const allies = [{ championId: row.champion_id, position: row.team_position || null, me: true }, ...team(row.allies, row.ally_positions)].sort(byPosition);
+  const enemies = team(row.enemies, row.enemy_positions).map((e) => ({ ...e, opponent: e.championId === row.opponent_champion_id })).sort(byPosition);
+  const minutes = review && Array.isArray(review.minutes) ? review.minutes : [];
+  const curve = (a, b) => minutes.map((m, minute) => (m && m[b] != null ? { minute, v: m[a] - m[b] } : null)).filter(Boolean);
+  const diffs = { gold: curve(0, 3), xp: curve(1, 4), cs: curve(2, 5) };
+  const own = { gold: minutes.map((m, minute) => (m ? { minute, v: m[0] } : null)).filter(Boolean) };
+  const at = (list, minute) => (list.find((p) => p.minute === minute) || {}).v ?? null;
+  const events = review && Array.isArray(review.events) ? review.events : [];
+  const monsters = review && Array.isArray(review.monsters) ? review.monsters : [];
+  return {
+    row,
+    hasReview: !!(review && minutes.length),
+    allies,
+    enemies,
+    diffs,
+    own,
+    at10: { gold: at(diffs.gold, 10), xp: at(diffs.xp, 10), cs: at(diffs.cs, 10) },
+    path: review && Array.isArray(review.path) ? review.path : [],
+    events,
+    monsters,
+    counts: {
+      kills: events.filter((e) => e.k === 'kill').length,
+      deaths: events.filter((e) => e.k === 'death').length,
+      assists: events.filter((e) => e.k === 'assist').length,
+      early: events.filter((e) => e.t < 600 && e.k !== 'death').length,
+      earlyDeaths: events.filter((e) => e.t < 600 && e.k === 'death').length,
+    },
+    objectives: row.objectives_team || null,
+    loadout: row.loadout || null,
+    ganks: Array.isArray(row.ganks) ? row.ganks : [],
+  };
+}
+
 /* ---------------- Motion graph (Översikt) ---------------- */
 
 /**

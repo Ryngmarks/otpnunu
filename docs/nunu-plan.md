@@ -331,3 +331,13 @@ Stora siffran är totalen för filtren ovan; linjen är ett rullande snitt (5–
 många som finns), äldst till vänster. Hovra/peka för värdet och antal matcher bakom varje punkt.
 Kan pausas, rör sig inte vid "minska rörelse", och data finns även som tabell för skärmläsare.
 Beräkning: `trendSeries` i `js/career/stats.js`; animation: `js/career/motion.js`.
+
+## Matchgenomgång
+
+Klicka på en match (Matcher, Senaste matcher eller matchhistoriken i Biblioteket): hero med resultat och
+KDA, nyckeltal, lagen position för position som championkort (du och din motståndare markerade),
+guld/XP/CS mot motståndaren minut för minut (före = blått, efter = orange) med kills, dödsfall och
+objectives på tidslinjen, kartan med din väg de första 15 minuterna, objectives som speglade staplar,
+ganks och build (items, runor, summoner spells från Data Dragon).
+Data: `account_match.review` (hämtas när matchen öppnas), `loadout`, `objectives_team`,
+`ally_positions`/`enemy_positions` – derived_version 5 (010_review.sql). `matchReview` i stats.js.

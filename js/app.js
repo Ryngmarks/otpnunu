@@ -2,10 +2,10 @@
  * otpnunu – startpunkt. Kopplar ihop inloggning, data, filter, synk och rendering.
  */
 import { createApi, ApiError } from './core/api.js';
-import { loadChampions } from './core/ddragon.js';
-import { NUNU, QUEUE_FILTERS, filterMatches, summarize, recentForm, byAccount, opponents, masterySummary, careerSummary, damageReport, gankReport, earlyReport, synergyReport, matchupReport, impactReport, eloSeries, overviewKpis, insights, trendSeries, scoutTable, scoutPicks, libraryTable, championProfile, positionRows, hasPositions } from './career/stats.js';
+import { loadChampions, loadExtras } from './core/ddragon.js';
+import { NUNU, QUEUE_FILTERS, filterMatches, summarize, recentForm, byAccount, opponents, masterySummary, careerSummary, damageReport, gankReport, earlyReport, synergyReport, matchupReport, impactReport, eloSeries, overviewKpis, insights, trendSeries, scoutTable, scoutPicks, libraryTable, championProfile, positionRows, hasPositions, matchReview } from './career/stats.js';
 import { mountMotion } from './career/motion.js';
-import { esc, heroHtml, tilesHtml, formHtml, accountsHtml, opponentsHtml, matchesHtml, careerHtml, damageHtml, gankHtml, earlyHtml, synergyHtml, matchupHtml, impactHtml, eloHtml, kpisHtml, insightsHtml, goldLineHtml, scoutHtml, scoutPickHtml, libraryHtml, championDetailHtml, championEditorHtml } from './career/view.js';
+import { esc, heroHtml, tilesHtml, formHtml, accountsHtml, opponentsHtml, matchesHtml, careerHtml, damageHtml, gankHtml, earlyHtml, synergyHtml, matchupHtml, impactHtml, eloHtml, kpisHtml, insightsHtml, goldLineHtml, scoutHtml, scoutPickHtml, libraryHtml, championDetailHtml, championEditorHtml, matchReviewHtml, rvChartHtml } from './career/view.js';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -29,6 +29,9 @@ const state = {
   scout: { side: 'against', q: '', color: '', sort: 'games', limit: 40 },
   library: { side: 'against', q: '', color: '', sort: 'games', limit: 24, role: 'all' },
   detail: null, // { championId, side, limit, role } när detaljvyn är öppen
+  review: null, // { puuid, matchId, metric } när matchgenomgången är öppen
+  reviews: new Map(), // hämtade matchgenomgångar (account_match.review)
+  extras: null, // runor och summoner spells (laddas första gången en match öppnas)
   picks: { allies: [null, null, null, null], enemies: [null, null, null, null, null] },
   champs: { name: (id) => `#${id}`, icon: () => null, tags: () => [], all: () => [] },
   filters: { champion: 'nunu', queue: 'rift', account: '' },
@@ -215,6 +218,58 @@ function openDetail(championId, side, role = 'all') {
   dlg.scrollTop = 0;
 }
 
+/* ---------------- Matchgenomgång ---------------- */
+
+function reviewModel() {
+  const rv = state.review;
+  const row = state.matches.find((r) => r.puuid === rv.puuid && r.match_id === rv.matchId);
+  if (!row) return null;
+  const key = `${rv.puuid}|${rv.matchId}`;
+  return matchReview(row, state.reviews.get(key) || row.review || null);
+}
+
+function renderReview() {
+  const m = reviewModel();
+  if (!m) return;
+  $('[data-rv-body]').innerHTML = matchReviewHtml(m, state.champs, state.extrasReady || null, state.accounts, { metric: state.review.metric });
+}
+
+async function openReview(puuid, matchId) {
+  state.review = { puuid, matchId, metric: 'gold' };
+  const dlg = $('[data-rv-dialog]');
+  renderReview();
+  if (!dlg.open) dlg.showModal();
+  dlg.scrollTop = 0;
+  const key = `${puuid}|${matchId}`;
+  if (!state.extras && state.champs.version) {
+    state.extras = loadExtras(state.champs.version, { base: cfg.DDRAGON_URL || undefined }).then((x) => { state.extrasReady = x; });
+  }
+  const jobs = [state.extras];
+  if (!state.reviews.has(key)) jobs.push(api.review(puuid, matchId).then((r) => { state.reviews.set(key, r); }));
+  await Promise.all(jobs).catch(() => {});
+  if (state.review && state.review.puuid === puuid && state.review.matchId === matchId) renderReview();
+}
+
+/** Peka på kurvan: värdet för minuten under pekaren. */
+function reviewHover(e) {
+  const svg = e.target.closest && e.target.closest('[data-rv-chart]');
+  if (!svg) return;
+  const box = svg.getBoundingClientRect();
+  const W = Number(svg.dataset.w), L = Number(svg.dataset.l), R = Number(svg.dataset.r), last = Number(svg.dataset.last);
+  const vx = ((e.clientX - box.left) / box.width) * W;
+  const minute = Math.max(0, Math.min(last, Math.round(((vx - L) / (W - L - R)) * last)));
+  const pts = JSON.parse(svg.parentElement.querySelector('[data-rv-points]').textContent);
+  const p = pts.find((q) => q.minute === minute);
+  if (!p) return;
+  const cross = svg.querySelector('[data-rv-cross]');
+  const cx = L + (minute / Math.max(1, last)) * (W - L - R);
+  cross.hidden = false;
+  cross.setAttribute('x1', cx); cross.setAttribute('x2', cx);
+  const unit = { gold: 'guld', xp: 'XP', cs: 'CS' }[state.review.metric];
+  const v = `${p.v > 0 ? '+' : p.v < 0 ? '−' : '±'}${Math.abs(p.v).toLocaleString('sv-SE')}`;
+  svg.parentElement.querySelector('[data-rv-readout]').innerHTML = `<b>${v}</b> ${unit} vid ${minute} min`;
+}
+
 /** Champion från fritext: exakt namn först, annars första som börjar likadant. */
 function findChampion(text) {
   const q = text.trim().toLowerCase();
@@ -340,8 +395,17 @@ function bind() {
   });
 
   document.addEventListener('click', async (e) => {
-    const t = e.target.closest('[data-action],[data-champion],[data-queue],[data-unlink],[data-more],[data-tab],[data-opinion],[data-scout-side],[data-scout-color],[data-scout-more],[data-lib-open],[data-lib-close],[data-lib-side],[data-lib-tab-side],[data-lib-color],[data-lib-more],[data-lib-more-games],[data-lib-role]');
+    const t = e.target.closest('[data-action],[data-champion],[data-queue],[data-unlink],[data-more],[data-tab],[data-opinion],[data-scout-side],[data-scout-color],[data-scout-more],[data-lib-open],[data-lib-close],[data-lib-side],[data-lib-tab-side],[data-lib-color],[data-lib-more],[data-lib-more-games],[data-lib-role],[data-match-open],[data-rv-close],[data-rv-metric]');
     if (!t) return;
+    if (t.dataset.matchOpen) { const [puuid, id] = t.dataset.matchOpen.split('|'); return openReview(puuid, id); }
+    if (t.hasAttribute('data-rv-close')) return $('[data-rv-dialog]').close();
+    if (t.dataset.rvMetric) {
+      state.review.metric = t.dataset.rvMetric;
+      const m = reviewModel();
+      $('[data-rv-chartwrap]').innerHTML = rvChartHtml(m, state.review.metric);
+      $$('[data-rv-metric]').forEach((b) => b.classList.toggle('is-active', b.dataset.rvMetric === state.review.metric));
+      return;
+    }
     if (t.dataset.libOpen) return openDetail(Number(t.dataset.libOpen), t.dataset.side, t.closest('[data-library]') ? state.library.role : 'all');
     if (t.dataset.libRole) { Object.assign(state.library, { role: t.dataset.libRole, limit: 24 }); return render(); }
     if (t.hasAttribute('data-lib-close')) return $('[data-lib-dialog]').close();
@@ -387,6 +451,15 @@ function bind() {
   });
 
   $('[data-filter-account]').addEventListener('change', (e) => { state.filters.account = e.target.value; saveFilters(); });
+
+  // Matchgenomgång
+  const rvd = $('[data-rv-dialog]');
+  rvd.addEventListener('close', () => { state.review = null; });
+  rvd.addEventListener('click', (e) => { if (e.target === rvd) rvd.close(); });
+  rvd.addEventListener('pointermove', reviewHover);
+  document.addEventListener('keydown', (e) => {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('[data-match-open]')) { e.preventDefault(); e.target.click(); }
+  });
 
   // Champion Library
   $('[data-lib-search]').addEventListener('input', (e) => { Object.assign(state.library, { q: e.target.value, limit: 24 }); render(); });

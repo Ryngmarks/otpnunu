@@ -490,3 +490,40 @@ test('positionRows: lagkamrater och motståndare per position, med reserv för m
   assert.equal(s.hasPositions(rows), true);
   assert.equal(s.hasPositions([rows[2]]), false);
 });
+
+test('matchReview: lagen per position, kurvor mot motståndaren och händelser', async () => {
+  const s = await import('../js/career/stats.js');
+  const row = {
+    champion_id: 20, team_position: 'JUNGLE', opponent_champion_id: 64, duration_s: 1500, queue_id: 420, game_start: '2026-10-01T18:00:00Z',
+    win: true, kills: 5, deaths: 2, assists: 9, cs: 180, damage: 20000, vision: 30, ganks: [],
+    allies: [412, 103, 51, 86], ally_positions: ['UTILITY', 'MIDDLE', 'BOTTOM', 'TOP'],
+    enemies: [7, 64, 22, 1, 2], enemy_positions: ['MIDDLE', 'JUNGLE', 'BOTTOM', 'TOP', 'UTILITY'],
+    objectives_team: { mine: { dragon: 2 }, theirs: { dragon: 1 } }, loadout: { items: [3020], spells: [11, 4] },
+  };
+  const review = {
+    minutes: [[500, 0, 0, 500, 0, 0], [900, 300, 4, 800, 280, 5], null, [2000, 1200, 20, 1700, 1300, 22]],
+    path: [[1000, 2000]],
+    events: [{ t: 200, k: 'kill', x: 1, y: 1, vs: 64 }, { t: 700, k: 'death', x: 1, y: 1, vs: 64 }],
+    monsters: [{ t: 330, type: 'DRAGON', sub: 'FIRE_DRAGON', mine: true, me: true }],
+  };
+  const m = s.matchReview(row, review);
+  assert.deepEqual(m.allies.map((a) => a.position), ['TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'UTILITY']);
+  assert.equal(m.allies[1].me, true);
+  assert.equal(m.enemies.find((e) => e.opponent).championId, 64);
+  assert.deepEqual(m.diffs.gold.map((p) => [p.minute, p.v]), [[0, 0], [1, 100], [3, 300]]);
+  assert.deepEqual(m.diffs.cs.map((p) => p.v), [0, -1, -2]);
+  assert.deepEqual([m.counts.kills, m.counts.deaths, m.counts.early], [1, 1, 1]);
+  assert.equal(m.hasReview, true);
+  const none = s.matchReview({ ...row, ally_positions: null, enemy_positions: null }, null);
+  assert.equal(none.hasReview, false);
+  assert.equal(none.at10.gold, null);
+  assert.equal(none.allies.length, 5);
+
+  const v = await import('../js/career/view.js');
+  const champs = { name: (id) => `C${id}`, icon: () => null, tile: () => null, splash: () => null, item: (id) => `i/${id}.png`, map: () => null };
+  const html = v.matchReviewHtml(m, champs, null, [], {});
+  assert.match(html, /rv-line--up/);
+  assert.match(html, /Fire-drake/);
+  assert.doesNotMatch(html, /undefined|NaN|null/);
+  assert.match(v.matchReviewHtml(none, champs, null, [], {}), /Kurvor och karta saknas/);
+});

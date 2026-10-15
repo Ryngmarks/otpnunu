@@ -325,6 +325,16 @@ export function createDevServer({ port = 8787, riot = createFakeRiot(), store = 
       const data = Object.fromEntries(Object.entries(CHAMPS).map(([key, id]) => [id, { key, name: id === 'Nunu' ? 'Nunu & Willump' : id.replace(/([a-z])([A-Z])/g, '$1 $2'), image: { full: `${id}.png` }, tags: [TAGS[key]] }]));
       return send(res, 200, { data });
     }
+    if (p.endsWith('/runesReforged.json')) {
+      return send(res, 200, [
+        { id: 8200, name: 'Sorcery', icon: 'perk-images/Styles/7202_Sorcery.png', slots: [{ runes: [{ id: 8214, name: 'Summon Aery', icon: 'perk-images/Styles/Sorcery/SummonAery/SummonAery.png' }] }] },
+        { id: 8000, name: 'Precision', icon: 'perk-images/Styles/7201_Precision.png', slots: [{ runes: [{ id: 8010, name: 'Conqueror', icon: 'perk-images/Styles/Precision/Conqueror/Conqueror.png' }] }] },
+        { id: 8300, name: 'Inspiration', icon: 'perk-images/Styles/7203_Whimsy.png', slots: [] },
+      ]);
+    }
+    if (p.endsWith('/summoner.json')) {
+      return send(res, 200, { data: { SummonerSmite: { key: '11', name: 'Smite', image: { full: 'SummonerSmite.png' } }, SummonerFlash: { key: '4', name: 'Flash', image: { full: 'SummonerFlash.png' } } } });
+    }
     if (p.startsWith('/ddragon/cdn/') && /\.(png|jpg)$/.test(p)) {
       const name = p.split('/').pop().replace(/(_0)?\.(png|jpg)$/, '');
       const hue = [...name].reduce((s, c) => s + c.charCodeAt(0), 0) % 360;

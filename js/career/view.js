@@ -104,7 +104,7 @@ export function matchesHtml(rows, champs, accounts, limit) {
   return `<ul class="matches">${rows.slice(0, limit).map((r) => {
     const min = r.duration_s / 60;
     return `
-      <li class="match match--${r.win ? 'win' : 'loss'}">
+      <li class="match match--${r.win ? 'win' : 'loss'}" data-match-open="${esc(r.puuid)}|${esc(r.match_id)}" tabindex="0" role="button" aria-label="Öppna matchgenomgång: ${r.win ? 'vinst' : 'förlust'} ${esc(shortDate(r.game_start))}">
         ${champIcon(champs, r.champion_id, 'champ--lg')}
         <div class="match__main">
           <strong>${r.win ? 'Vinst' : 'Förlust'} <span class="muted">· ${esc(queueLabel(r.queue_id))}</span></strong>
@@ -704,5 +704,241 @@ export function championEditorHtml(p, champs) {
       <label class="lib-field"><span>Strategi och anteckningar</span>
         <textarea rows="5" maxlength="2000" placeholder="Hur spelar du ${p.side === 'with' ? 'med' : 'mot'} ${name}? Leveling, första clear, när du ska ganka…" data-strategy data-champ="${p.championId}" data-side="${p.side}">${esc(p.strategy)}</textarea></label>
       <p class="card__hint lib-editor__hint">Sparas automatiskt när du lämnar fältet · separat för ${RELATION[p.side].toLowerCase()}</p>
+    </div>`;
+}
+
+/* ---------------- Matchgenomgång ---------------- */
+
+const ROLE_ICON = {
+  TOP: '<path d="M3.5 10.5V3.5h7"/>',
+  JUNGLE: '<circle cx="7" cy="7" r="2.6" class="role__fill"/>',
+  MIDDLE: '<path d="M3.5 10.5l7-7"/>',
+  BOTTOM: '<path d="M3.5 10.5h7v-7"/>',
+  UTILITY: '<path d="M7 3.8v6.4M3.8 7h6.4"/>',
+};
+export const roleIcon = (pos) => (ROLE_ICON[pos]
+  ? `<svg class="role" viewBox="0 0 14 14" aria-hidden="true"><rect x="1" y="1" width="12" height="12" rx="2" class="role__map"/>${ROLE_ICON[pos]}</svg>`
+  : '');
+const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
+const MONSTER = {
+  DRAGON: { label: 'Drake', mark: 'D' }, BARON_NASHOR: { label: 'Baron', mark: 'B' }, RIFTHERALD: { label: 'Herald', mark: 'H' },
+  HORDE: { label: 'Voidgrub', mark: 'V' }, ATAKHAN: { label: 'Atakhan', mark: 'A' }, ELDER_DRAGON: { label: 'Elder', mark: 'E' },
+};
+const monsterLabel = (m) => {
+  const base = MONSTER[m.type] ? MONSTER[m.type].label : 'Monster';
+  if (m.type !== 'DRAGON' || !m.sub) return base;
+  const sub = m.sub.replace('_DRAGON', '').toLowerCase();
+  return `${sub.charAt(0).toUpperCase()}${sub.slice(1)}-drake`;
+};
+
+function rvPlayer(p, champs, side) {
+  const name = champs.name(p.championId);
+  const tag = p.me ? '<span class="rv-pl__tag is-me">Du</span>' : p.opponent ? '<span class="rv-pl__tag" title="Din motståndare på samma position">VS</span>' : '';
+  return `<div class="rv-pl rv-pl--${side} ${p.me ? 'is-me' : ''} ${p.opponent ? 'is-opp' : ''}"${art(champs.tile && champs.tile(p.championId), champs.icon(p.championId))}>
+    <span class="rv-pl__name">${esc(name)}</span>${tag}</div>`;
+}
+
+/** Lagen mot varandra, position för position. */
+function rvTeams(m, champs) {
+  const rows = POSITIONS_UI.map((pos) => ({
+    pos,
+    a: m.allies.find((x) => x.position === pos),
+    e: m.enemies.find((x) => x.position === pos),
+  }));
+  const placed = rows.some((r) => r.a || r.e);
+  if (!placed) {
+    // Utan positioner (äldre data): bara lagen i ordning
+    const n = Math.max(m.allies.length, m.enemies.length);
+    for (let i = 0; i < n; i++) rows[i] = { pos: null, a: m.allies[i], e: m.enemies[i] };
+  }
+  return `<div class="rv-teams">
+    <div class="rv-teams__head"><span>Ditt lag</span><span></span><span>Motståndare</span></div>
+    ${rows.filter((r) => r.a || r.e).map((r) => `
+      <div class="rv-teams__row">
+        ${r.a ? rvPlayer(r.a, champs, 'ally') : '<div class="rv-pl rv-pl--empty"></div>'}
+        <span class="rv-teams__pos" title="${r.pos ? esc(POSITION_NAMES[r.pos]) : ''}">${roleIcon(r.pos)}</span>
+        ${r.e ? rvPlayer(r.e, champs, 'enemy') : '<div class="rv-pl rv-pl--empty"></div>'}
+      </div>`).join('')}
+  </div>`;
+}
+const POSITIONS_UI = ['TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'UTILITY'];
+const POSITION_NAMES = { TOP: 'Top', JUNGLE: 'Jungle', MIDDLE: 'Mid', BOTTOM: 'Bot', UTILITY: 'Support' };
+
+const METRICS = { gold: { label: 'Guld', unit: 'guld' }, xp: { label: 'XP', unit: 'XP' }, cs: { label: 'CS', unit: 'CS' } };
+
+/** Skillnad mot motståndaren minut för minut: blått ovanför noll (före), orange under (efter). */
+export function rvChartHtml(m, metric = 'gold') {
+  const pts = m.diffs[metric];
+  if (!pts || pts.length < 2) return '<p class="empty">Ingen motståndare på din position i tidslinjen.</p>';
+  const W = 640, H = 220, L = 44, R = 12, T = 16, B = 46;
+  const last = pts[pts.length - 1].minute;
+  const maxAbs = Math.max(metric === 'cs' ? 10 : 300, ...pts.map((p) => Math.abs(p.v)));
+  const step = metric === 'cs' ? 10 : maxAbs > 3000 ? 2000 : maxAbs > 1500 ? 1000 : 500;
+  const lim = Math.ceil(maxAbs / step) * step;
+  const x = (min) => L + (min / Math.max(1, last)) * (W - L - R);
+  const y = (v) => T + (1 - (v + lim) / (2 * lim)) * (H - T - B);
+  const line = pts.map((p, i) => `${i ? 'L' : 'M'}${x(p.minute).toFixed(1)},${y(p.v).toFixed(1)}`).join('');
+  const area = `${line}L${x(last).toFixed(1)},${y(0).toFixed(1)}L${x(pts[0].minute).toFixed(1)},${y(0).toFixed(1)}Z`;
+  const y0 = y(0).toFixed(1);
+  const ticks = [];
+  for (let t = 0; t <= last; t += 5) ticks.push(t);
+  const vAt = (sec) => {
+    const mm = sec / 60;
+    const a = pts.filter((p) => p.minute <= mm).pop() || pts[0];
+    const b = pts.find((p) => p.minute >= mm) || a;
+    return a === b ? a.v : a.v + ((b.v - a.v) * (mm - a.minute)) / (b.minute - a.minute);
+  };
+  const evMarks = m.events.filter((e) => e.k !== 'assist' && e.t / 60 <= last).map((e) => {
+    const cx = x(e.t / 60).toFixed(1);
+    const cy = y(vAt(e.t)).toFixed(1);
+    return e.k === 'kill'
+      ? `<circle class="rv-ev rv-ev--kill" cx="${cx}" cy="${cy}" r="5"><title>${mmss(e.t)} kill</title></circle>`
+      : `<g class="rv-ev rv-ev--death" transform="translate(${cx},${cy})"><path d="M-4,-4L4,4M4,-4L-4,4"/><title>${mmss(e.t)} dödsfall</title></g>`;
+  }).join('');
+  const track = H - 22;
+  const monMarks = m.monsters.filter((e) => e.t / 60 <= last).map((e) => `
+    <g class="rv-mon ${e.mine ? 'is-mine' : 'is-theirs'}" transform="translate(${x(e.t / 60).toFixed(1)},${track})">
+      <rect x="-8" y="-8" width="16" height="16" rx="4" transform="rotate(45)"/><text y="4" text-anchor="middle">${(MONSTER[e.type] || { mark: '?' }).mark}</text>
+      <title>${mmss(e.t)} ${esc(monsterLabel(e))} – ${e.mine ? 'ditt lag' : 'motståndarna'}${e.me ? ' (du var med)' : ''}</title>
+    </g>`).join('');
+  const end = pts[pts.length - 1];
+  return `
+    <svg class="rv-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${METRICS[metric].label} mot motståndaren: ${esc(signed(end.v))} vid ${end.minute} min${m.at10[metric] != null ? `, ${esc(signed(m.at10[metric]))} vid 10 min` : ''}" data-rv-chart data-last="${last}" data-l="${L}" data-r="${R}" data-w="${W}">
+      <defs>
+        <clipPath id="rv-above"><rect x="0" y="0" width="${W}" height="${y0}"/></clipPath>
+        <clipPath id="rv-below"><rect x="0" y="${y0}" width="${W}" height="${H}"/></clipPath>
+        <linearGradient id="rv-g-up" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#5ec8f5" stop-opacity=".55"/><stop offset="1" stop-color="#5ec8f5" stop-opacity=".05"/></linearGradient>
+        <linearGradient id="rv-g-down" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#f2884b" stop-opacity=".05"/><stop offset="1" stop-color="#f2884b" stop-opacity=".55"/></linearGradient>
+      </defs>
+      ${[lim, lim / 2, -lim / 2, -lim].map((v) => `<line class="rv-grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text class="rv-tick" x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${esc(signed(v))}</text>`).join('')}
+      <line class="rv-zero" x1="${L}" x2="${W - R}" y1="${y0}" y2="${y0}"/>
+      <text class="rv-tick" x="${L - 6}" y="${Number(y0) + 4}" text-anchor="end">0</text>
+      ${ticks.map((t) => `<text class="rv-tick" x="${x(t)}" y="${H - 34}" text-anchor="middle">${t}′</text>`).join('')}
+      <g class="rv-draw">
+        <path class="rv-area" d="${area}" fill="url(#rv-g-up)" clip-path="url(#rv-above)"/>
+        <path class="rv-area" d="${area}" fill="url(#rv-g-down)" clip-path="url(#rv-below)"/>
+        <path class="rv-line rv-line--up" d="${line}" clip-path="url(#rv-above)"/>
+        <path class="rv-line rv-line--down" d="${line}" clip-path="url(#rv-below)"/>
+        ${evMarks}
+      </g>
+      <line class="rv-track" x1="${L}" x2="${W - R}" y1="${track}" y2="${track}"/>
+      ${monMarks}
+      <line class="rv-cross" data-rv-cross y1="${T}" y2="${H - B}" hidden/>
+    </svg>
+    <div class="rv-readout" data-rv-readout aria-live="polite">
+      <b>${esc(signed(end.v))}</b> ${METRICS[metric].unit} vid ${end.minute} min${m.at10[metric] != null ? ` · <b>${esc(signed(m.at10[metric]))}</b> vid 10 min` : ''}
+    </div>
+    <script type="application/json" data-rv-points>${JSON.stringify(pts)}</script>
+    <p class="legend"><span><i class="sw is-win"></i>Före motståndaren</span><span><i class="sw is-loss"></i>Efter</span><span><i class="rv-key rv-key--kill"></i>Kill</span><span><i class="rv-key rv-key--death">×</i>Dödsfall</span><span><i class="rv-key rv-key--mon is-mine"></i>Objective ditt lag</span><span><i class="rv-key rv-key--mon is-theirs"></i>Motståndarna</span></p>`;
+}
+
+/** Summoner's Rift med din väg de första 15 min, dina kills/dödsfall och elite monsters. */
+function rvMapHtml(m, champs) {
+  const X = (x) => ((x / 14820) * 100).toFixed(2);
+  const Y = (y) => (100 - (y / 14881) * 100).toFixed(2);
+  const img = champs.map && champs.map();
+  const path = m.path.map(([x, y]) => `${X(x)},${Y(y)}`).join(' ');
+  const dots = m.path.map(([x, y], i) => ((i + 1) % 3 === 0 ? `<g class="rv-step" transform="translate(${X(x)},${Y(y)})"><circle r="2.3"/><text y="0.9" text-anchor="middle">${i + 1}</text></g>` : '')).join('');
+  const ev = m.events.map((e) => {
+    const t = `<title>${mmss(e.t)} ${e.k === 'kill' ? 'kill' : e.k === 'death' ? 'dödsfall' : 'assist'}</title>`;
+    if (e.k === 'death') return `<g class="rv-ev rv-ev--death" transform="translate(${X(e.x)},${Y(e.y)})"><path d="M-1.6,-1.6L1.6,1.6M1.6,-1.6L-1.6,1.6"/>${t}</g>`;
+    return `<circle class="rv-ev rv-ev--${e.k}" cx="${X(e.x)}" cy="${Y(e.y)}" r="${e.k === 'kill' ? 1.8 : 1.3}">${t}</circle>`;
+  }).join('');
+  const mon = m.monsters.filter((e) => e.x != null).map((e) => `
+    <g class="rv-mon ${e.mine ? 'is-mine' : 'is-theirs'}" transform="translate(${X(e.x)},${Y(e.y)})"><rect x="-2.2" y="-2.2" width="4.4" height="4.4" rx="1" transform="rotate(45)"/><title>${mmss(e.t)} ${esc(monsterLabel(e))}</title></g>`).join('');
+  return `
+    <div class="rv-map">
+      <svg viewBox="0 0 100 100" role="img" aria-label="Kartan: din väg de första ${m.path.length} minuterna, ${m.counts.kills} kills och ${m.counts.deaths} dödsfall">
+        <rect class="rv-map__bg" width="100" height="100" rx="3"/>
+        ${img ? `<image href="${esc(img)}" width="100" height="100" preserveAspectRatio="none" class="rv-map__img"/>` : ''}
+        <g class="rv-map__lanes"><path d="M6,94 L6,6 L94,6"/><path d="M6,94 L94,94 L94,6"/><path d="M6,94 L94,6"/><path d="M14,14 C40,40 60,60 86,86" class="rv-map__river"/></g>
+        ${path ? `<polyline class="rv-path" points="${path}" pathLength="1"/>` : ''}
+        ${dots}${mon}${ev}
+      </svg>
+    </div>
+    <p class="legend"><span><i class="rv-key rv-key--path"></i>Din väg (minut 1–15)</span><span><i class="rv-key rv-key--kill"></i>Kill</span><span><i class="rv-key rv-key--assist"></i>Assist</span><span><i class="rv-key rv-key--death">×</i>Dödsfall</span></p>`;
+}
+
+/** Objectives: ditt lag mot motståndarna, som speglade staplar. */
+function rvObjectivesHtml(o) {
+  if (!o) return '';
+  const rows = [['dragon', 'Drakar'], ['horde', 'Voidgrubs'], ['riftHerald', 'Herald'], ['baron', 'Baron'], ['tower', 'Torn'], ['inhibitor', 'Inhibitors']]
+    .map(([k, label]) => ({ label, a: o.mine[k] || 0, b: o.theirs[k] || 0 }))
+    .filter((r) => r.a || r.b);
+  if (!rows.length) return '';
+  return `<ul class="rv-obj">${rows.map((r) => {
+    const max = Math.max(r.a, r.b, 1);
+    return `<li><b class="rv-obj__n">${r.a}</b><span class="rv-obj__bar is-mine"><i style="width:${(r.a / max) * 100}%"></i></span>
+      <span class="rv-obj__label">${r.label}</span>
+      <span class="rv-obj__bar is-theirs"><i style="width:${(r.b / max) * 100}%"></i></span><b class="rv-obj__n">${r.b}</b></li>`;
+  }).join('')}</ul>
+  <p class="legend"><span><i class="sw is-win"></i>Ditt lag${o.mine.firstDragon ? ' · första draken' : ''}</span><span><i class="sw is-loss"></i>Motståndarna${o.theirs.firstDragon ? ' · första draken' : ''}</span></p>`;
+}
+
+function rvBuildHtml(l, champs, extras) {
+  if (!l) return '';
+  const icon = (src, name, cls = '') => (src ? `<img class="rv-ico ${cls}" src="${esc(src)}" alt="${esc(name)}" title="${esc(name)}" loading="lazy" width="40" height="40">` : `<span class="rv-ico rv-ico--empty ${cls}" title="${esc(name)}">${esc(String(name).slice(0, 3))}</span>`);
+  const items = l.items.map((id) => icon(champs.item && champs.item(id), `Item ${id}`)).join('');
+  const perk = (id) => (id && extras ? extras.perk(id) : null);
+  const ks = perk(l.keystone);
+  const spells = l.spells.map((id) => { const sp = extras && extras.spell(id); return icon(sp && sp.icon, sp ? sp.name : `Spell ${id}`, 'rv-ico--sm'); }).join('');
+  const tree = (id) => { const t = perk(id); return t ? icon(t.icon, t.name, 'rv-ico--sm rv-ico--round') : ''; };
+  return `
+    <div class="rv-build">
+      <div><span class="rv-build__label">Items</span><div class="rv-build__row">${items || '<span class="muted">–</span>'}${l.trinket ? icon(champs.item && champs.item(l.trinket), 'Trinket', 'rv-ico--trinket') : ''}</div></div>
+      <div><span class="rv-build__label">Runor</span><div class="rv-build__row">${ks ? icon(ks.icon, ks.name, 'rv-ico--round rv-ico--key') : l.keystone ? icon(null, `Runa ${l.keystone}`) : '–'}${tree(l.primary)}${tree(l.secondary)}
+        ${ks ? `<span class="rv-build__name">${esc(ks.name)}</span>` : ''}</div></div>
+      <div><span class="rv-build__label">Spells</span><div class="rv-build__row">${spells || '–'}</div></div>
+    </div>`;
+}
+
+/** Hela matchgenomgången. extras = runor och spells (kan vara null). */
+export function matchReviewHtml(m, champs, extras, accounts, { metric = 'gold' } = {}) {
+  const r = m.row;
+  const min = Math.round(r.duration_s / 60);
+  const acc = accounts.length > 1 ? accounts.find((a) => a.puuid === r.puuid) : null;
+  const stat = (label, value) => `<div class="rv-stat"><b>${value}</b><span>${label}</span></div>`;
+  const ganks = m.ganks.filter((g) => g.takedowns > 0);
+  return `
+    <header class="rv-hero ${r.win ? 'is-win' : 'is-loss'}"${art(champs.splash && champs.splash(r.champion_id), champs.tile && champs.tile(r.champion_id), champs.icon(r.champion_id))}>
+      <button type="button" class="lib-hero__close" data-rv-close aria-label="Stäng">✕</button>
+      <div class="rv-hero__body">
+        <p class="eyebrow">${esc(queueLabel(r.queue_id))} · ${esc(shortDate(r.game_start))} · ${min} min${acc ? ` · ${esc(acc.game_name)}` : ''}</p>
+        <h2 class="rv-hero__result" id="rv-title">${r.win ? 'Vinst' : 'Förlust'}</h2>
+        <p class="rv-hero__kda"><b>${r.kills}</b> / <b class="${r.deaths ? 'neg' : ''}">${r.deaths}</b> / <b>${r.assists}</b> <span>${esc(champs.name(r.champion_id))}</span></p>
+      </div>
+    </header>
+    <div class="lib-detail">
+      <div class="rv-stats">
+        ${stat('KDA', dash(((r.kills + r.assists) / Math.max(1, r.deaths)).toFixed(2)))}
+        ${stat('CS/min', dash((r.cs / Math.max(1, r.duration_s / 60)).toFixed(1)))}
+        ${stat('Damage', num(r.damage))}
+        ${stat('Vision', num(r.vision))}
+        ${stat('Guld vid 10', m.at10.gold == null ? '–' : signed(m.at10.gold))}
+        ${stat('Ganks före 15', m.ganks.length || r.ganks ? num(ganks.length) : '–')}
+      </div>
+
+      <h3 class="sub">Lagen</h3>
+      ${rvTeams(m, champs)}
+
+      ${m.hasReview ? `
+        <div class="rv-head">
+          <h3 class="sub">Mot motståndaren på din position</h3>
+          <div class="seg" role="group" aria-label="Mått">${Object.entries(METRICS).map(([k, v]) => `<button type="button" data-rv-metric="${k}" class="${k === metric ? 'is-active' : ''}">${v.label}</button>`).join('')}</div>
+        </div>
+        <div class="rv-chartwrap" data-rv-chartwrap>${rvChartHtml(m, metric)}</div>
+
+        <div class="grid2 rv-grid2">
+          <div><h3 class="sub">Kartan</h3>${rvMapHtml(m, champs)}</div>
+          <div>
+            <h3 class="sub">Objectives</h3>${rvObjectivesHtml(m.objectives) || '<p class="empty">–</p>'}
+            ${m.monsters.length ? `<ul class="rv-timeline">${m.monsters.map((e) => `<li class="${e.mine ? 'is-mine' : 'is-theirs'}"><span>${mmss(e.t)}</span>${esc(monsterLabel(e))}${e.me ? ' <small>· du var med</small>' : ''}</li>`).join('')}</ul>` : ''}
+            ${ganks.length ? `<h3 class="sub">Ganks</h3><ul class="rv-ganks">${ganks.map((g) => `<li><span class="rv-ganks__lane">${esc(g.lane)}</span>${mmss(g.t / 1000)} · ${g.kills ? `${g.kills} kill` : 'assist'}${g.died ? ' · du dog' : ''}</li>`).join('')}</ul>` : ''}
+          </div>
+        </div>` : `
+        ${rvObjectivesHtml(m.objectives) ? `<h3 class="sub">Objectives</h3>${rvObjectivesHtml(m.objectives)}` : ''}
+        <p class="card__hint rv-note">Kurvor och karta saknas för den här matchen – ${r.derived_version >= 5 ? 'ingen tidslinje (t.ex. ARAM)' : 'de fylls i när synken räknat om matcherna efter 010_review.sql'}.</p>`}
+
+      ${m.loadout ? `<h3 class="sub">Build</h3>${rvBuildHtml(m.loadout, champs, extras)}` : ''}
     </div>`;
 }
