@@ -3,15 +3,16 @@
  */
 import { createApi, ApiError } from './core/api.js';
 import { loadChampions } from './core/ddragon.js';
-import { NUNU, QUEUE_FILTERS, filterMatches, summarize, recentForm, byAccount, opponents, masterySummary, careerSummary, damageReport, gankReport, earlyReport, synergyReport, matchupReport, impactReport, eloSeries, overviewKpis, insights } from './career/stats.js';
-import { esc, heroHtml, tilesHtml, formHtml, accountsHtml, opponentsHtml, matchesHtml, careerHtml, damageHtml, gankHtml, earlyHtml, synergyHtml, matchupHtml, impactHtml, eloHtml, kpisHtml, insightsHtml, goldLineHtml } from './career/view.js';
+import { NUNU, QUEUE_FILTERS, filterMatches, summarize, recentForm, byAccount, opponents, masterySummary, careerSummary, damageReport, gankReport, earlyReport, synergyReport, matchupReport, impactReport, eloSeries, overviewKpis, insights, scoutTable, scoutPicks } from './career/stats.js';
+import { esc, heroHtml, tilesHtml, formHtml, accountsHtml, opponentsHtml, matchesHtml, careerHtml, damageHtml, gankHtml, earlyHtml, synergyHtml, matchupHtml, impactHtml, eloHtml, kpisHtml, insightsHtml, goldLineHtml, scoutHtml, scoutPickHtml } from './career/view.js';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 const cfg = window.APP_CONFIG || {};
 const FILTER_KEY = 'nunu-filters';
 const TAB_KEY = 'nunu-tab';
-const TABS = ['oversikt', 'early', 'ganks', 'matchups', 'matcher', 'karriar'];
+const PICKS_KEY = 'nunu-scout-picks';
+const TABS = ['oversikt', 'scout', 'early', 'ganks', 'matchups', 'matcher', 'karriar'];
 const PAGE = 20;
 
 const state = {
@@ -22,14 +23,18 @@ const state = {
   history: [],
   deaths: [],
   ranks: [],
+  opinions: [],
   tab: 'oversikt',
-  champs: { name: (id) => `#${id}`, icon: () => null, tags: () => [] },
+  scout: { side: 'against', q: '', color: '', sort: 'games', limit: 40 },
+  picks: { allies: [null, null, null, null], enemies: [null, null, null, null, null] },
+  champs: { name: (id) => `#${id}`, icon: () => null, tags: () => [], all: () => [] },
   filters: { champion: 'nunu', queue: 'rift', account: '' },
   limit: PAGE,
   syncing: false,
   cancelSync: false,
 };
 try { Object.assign(state.filters, JSON.parse(localStorage.getItem(FILTER_KEY))); } catch (e) { /* ignorera */ }
+try { const p = JSON.parse(localStorage.getItem(PICKS_KEY)); if (p && Array.isArray(p.allies) && Array.isArray(p.enemies)) state.picks = p; } catch (e) { /* ignorera */ }
 try { const t = localStorage.getItem(TAB_KEY); if (TABS.includes(t)) state.tab = t; } catch (e) { /* ignorera */ }
 
 let api;
@@ -64,7 +69,7 @@ function show(view) {
 }
 
 function showLogin(message) {
-  Object.assign(state, { profile: null, accounts: [], matches: [], mastery: [], history: [], deaths: [] });
+  Object.assign(state, { profile: null, accounts: [], matches: [], mastery: [], history: [], deaths: [], opinions: [] });
   show('login');
   const err = $('[data-login-error]');
   err.textContent = message || '';
@@ -126,6 +131,8 @@ function render() {
   $('[data-damage]').innerHTML = damage;
   $('[data-damage-card]').hidden = !damage;
 
+  renderScout(rows);
+
   // Filterkontroller
   $$('[data-champion]').forEach((b) => b.classList.toggle('is-active', b.dataset.champion === f.champion));
   $('[data-filter-queue]').innerHTML = Object.entries({ ...QUEUE_FILTERS, all: { label: 'Alla lägen' } })
@@ -136,14 +143,67 @@ function render() {
     `<option value="${esc(a.puuid)}" ${a.puuid === f.account ? 'selected' : ''}>${esc(a.game_name)}#${esc(a.tag_line)}</option>`).join('')}`;
 }
 
+/** Live Scout: samma filtrerade matcher som resten av sidan (alla köer på Rift som standard). */
+function renderScout(rows) {
+  const sc = state.scout;
+  const table = scoutTable(rows, state.opinions, sc.side);
+  $('[data-scout]').innerHTML = scoutHtml(table, state.champs, sc);
+  $$('[data-scout-side] button').forEach((b) => b.classList.toggle('is-active', b.dataset.scoutSide === sc.side));
+  $('[data-scout-sort]').value = sc.sort;
+  const tables = { allies: scoutTable(rows, state.opinions, 'with'), enemies: scoutTable(rows, state.opinions, 'against') };
+  for (const team of ['allies', 'enemies']) {
+    const t = tables[team];
+    const picks = scoutPicks(t, state.picks[team].map((id) => id ?? -1));
+    state.picks[team].forEach((id, i) => {
+      const key = `${team}:${i}`;
+      const input = $(`[data-pick="${key}"]`);
+      if (document.activeElement !== input) input.value = id == null ? '' : state.champs.name(id);
+      $(`[data-pick-out="${key}"]`).innerHTML = id == null ? '' : scoutPickHtml(picks[i], state.champs, team === 'allies' ? 'with' : 'against', t.baseline);
+    });
+  }
+}
+
+/** Champion från fritext: exakt namn först, annars första som börjar likadant. */
+function findChampion(text) {
+  const q = text.trim().toLowerCase();
+  if (!q) return null;
+  const all = state.champs.all ? state.champs.all() : [];
+  const hit = all.find((c) => c.name.toLowerCase() === q) || all.find((c) => c.name.toLowerCase().startsWith(q))
+    || all.find((c) => c.name.toLowerCase().replace(/[^a-z]/g, '').startsWith(q.replace(/[^a-z]/g, '')));
+  return hit ? hit.id : null;
+}
+
+function savePicks() {
+  try { localStorage.setItem(PICKS_KEY, JSON.stringify(state.picks)); } catch (e) { /* ignorera */ }
+}
+
+/** Sparar din bedömning direkt i vyn och sedan i databasen; ångras om det misslyckas. */
+async function setOpinion(championId, side, patch) {
+  const before = state.opinions;
+  const cur = before.find((o) => o.champion_id === championId && o.side === side) || { champion_id: championId, side, opinion: null, note: '' };
+  const next = { ...cur, ...patch };
+  const empty = next.opinion == null && !next.note;
+  state.opinions = before.filter((o) => o !== cur).concat(empty ? [] : [next]);
+  render();
+  try {
+    if (empty) await api.deleteOpinion(championId, side);
+    else await api.saveOpinion({ profile_id: state.profile.id, champion_id: championId, side, opinion: next.opinion, note: next.note });
+  } catch (err) {
+    state.opinions = before;
+    render();
+    fail(err.status === 404 || /champion_opinion/.test(err.message) ? new ApiError(0, 'Kör 008_scout.sql i Supabase för att kunna spara bedömningar') : err);
+  }
+}
+
 async function reload() {
-  const [accounts, matches, mastery, history, deaths, ranks] = await Promise.all([
+  const [accounts, matches, mastery, history, deaths, ranks, opinions] = await Promise.all([
     api.accounts(), api.matches(), api.mastery(),
     api.seasonHistory().catch(() => []),  // 002_season_history.sql är valfri
     api.deaths().catch(() => []),         // 003_timelines.sql är valfri
     api.ranks().catch(() => []),          // 007_rank.sql är valfri
+    api.opinions().catch(() => []),       // 008_scout.sql är valfri
   ]);
-  Object.assign(state, { accounts, matches, mastery, history, deaths, ranks });
+  Object.assign(state, { accounts, matches, mastery, history, deaths, ranks, opinions });
   if (state.filters.account && !accounts.some((a) => a.puuid === state.filters.account)) state.filters.account = '';
   render();
 }
@@ -221,8 +281,17 @@ function bind() {
   });
 
   document.addEventListener('click', async (e) => {
-    const t = e.target.closest('[data-action],[data-champion],[data-queue],[data-unlink],[data-more],[data-tab]');
+    const t = e.target.closest('[data-action],[data-champion],[data-queue],[data-unlink],[data-more],[data-tab],[data-opinion],[data-scout-side],[data-scout-color],[data-scout-more]');
     if (!t) return;
+    if (t.dataset.opinion) {
+      const id = Number(t.dataset.champ);
+      const value = Number(t.dataset.opinion);
+      const cur = state.opinions.find((o) => o.champion_id === id && o.side === t.dataset.side);
+      return setOpinion(id, t.dataset.side, { opinion: cur && cur.opinion === value ? null : value });
+    }
+    if (t.dataset.scoutSide) { Object.assign(state.scout, { side: t.dataset.scoutSide, limit: 40 }); return render(); }
+    if (t.dataset.scoutColor !== undefined) { Object.assign(state.scout, { color: t.dataset.scoutColor, limit: 40 }); return render(); }
+    if (t.hasAttribute('data-scout-more')) { state.scout.limit += 40; return render(); }
     if (t.dataset.tab) {
       state.tab = t.dataset.tab;
       try { localStorage.setItem(TAB_KEY, state.tab); } catch (err) { /* ignorera */ }
@@ -241,11 +310,36 @@ function bind() {
     switch (t.dataset.action) {
       case 'sync': sync(); break;
       case 'cancel-sync': state.cancelSync = true; break;
+      case 'clear-picks':
+        state.picks = { allies: [null, null, null, null], enemies: [null, null, null, null, null] };
+        savePicks();
+        render();
+        break;
       case 'logout': await api.signOut(); showLogin(); break;
     }
   });
 
   $('[data-filter-account]').addEventListener('change', (e) => { state.filters.account = e.target.value; saveFilters(); });
+
+  // Live Scout
+  $('[data-scout-search]').addEventListener('input', (e) => { Object.assign(state.scout, { q: e.target.value, limit: 40 }); render(); });
+  $('[data-scout-sort]').addEventListener('change', (e) => { state.scout.sort = e.target.value; render(); });
+  document.addEventListener('change', (e) => {
+    const el = e.target;
+    if (el.matches('[data-note]')) {
+      const id = Number(el.dataset.champ);
+      const cur = state.opinions.find((o) => o.champion_id === id && o.side === el.dataset.side);
+      if ((cur ? cur.note || '' : '') !== el.value.trim()) setOpinion(id, el.dataset.side, { note: el.value.trim() });
+    }
+    if (el.matches('[data-pick]')) {
+      const [team, i] = el.dataset.pick.split(':');
+      const id = findChampion(el.value);
+      if (el.value.trim() && id == null) toast(`Hittar ingen champion som heter ”${el.value.trim()}”`);
+      state.picks[team][Number(i)] = id;
+      savePicks();
+      render();
+    }
+  });
 
   $('[data-link-form]').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -273,7 +367,11 @@ async function start() {
     state.profile = await api.profile();
     show('app');
     await reload();
-    loadChampions({ base: cfg.DDRAGON_URL || undefined }).then((c) => { state.champs = c; render(); });
+    loadChampions({ base: cfg.DDRAGON_URL || undefined }).then((c) => {
+      state.champs = c;
+      $('[data-scout-champs]').innerHTML = c.all().map((x) => `<option value="${esc(x.name)}"></option>`).join('');
+      render();
+    });
   } catch (err) {
     fail(err);
   }

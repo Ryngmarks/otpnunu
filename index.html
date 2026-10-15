@@ -77,6 +77,7 @@
 
     <nav class="tabs" aria-label="Avsnitt" data-tabs>
       <button type="button" data-tab="oversikt">Översikt</button>
+      <button type="button" data-tab="scout">Scout</button>
       <button type="button" data-tab="early">Early game</button>
       <button type="button" data-tab="ganks">Ganks</button>
       <button type="button" data-tab="matchups">Matchups</button>
@@ -134,6 +135,55 @@
           </form>
         </section>
       </div>
+    </div>
+
+    <!-- ============ LIVE SCOUT ============ -->
+    <div class="panel" data-panel="scout" hidden>
+      <section class="card">
+        <h2 class="card__title">Champ select</h2>
+        <p class="card__hint">Skriv in lagen – din historik och din egen bedömning visas direkt · med filtren ovan</p>
+        <p class="legend scout__legend">
+          <span><i class="scout__dot scout--green"></i>Grön: din bedömning är positiv och statistiken stödjer den</span>
+          <span><i class="scout__dot scout--red"></i>Röd: negativ och statistiken stödjer den</span>
+          <span><i class="scout__dot scout--orange"></i>Orange: bedömning och statistik säger emot varandra</span>
+          <span><i class="scout__dot scout--gray"></i>Grå: bedömning eller tillräckligt underlag saknas (under 5 matcher)</span>
+        </p>
+        <div class="split picks">
+          <div><h3 class="sub">Ditt lag</h3>
+          <div class="pick"><input class="pick__input" type="text" list="scout-champs" placeholder="Lagkamrat 1" autocomplete="off" data-pick="allies:0" aria-label="Lagkamrat 1"><div data-pick-out="allies:0"></div></div>
+          <div class="pick"><input class="pick__input" type="text" list="scout-champs" placeholder="Lagkamrat 2" autocomplete="off" data-pick="allies:1" aria-label="Lagkamrat 2"><div data-pick-out="allies:1"></div></div>
+          <div class="pick"><input class="pick__input" type="text" list="scout-champs" placeholder="Lagkamrat 3" autocomplete="off" data-pick="allies:2" aria-label="Lagkamrat 3"><div data-pick-out="allies:2"></div></div>
+          <div class="pick"><input class="pick__input" type="text" list="scout-champs" placeholder="Lagkamrat 4" autocomplete="off" data-pick="allies:3" aria-label="Lagkamrat 4"><div data-pick-out="allies:3"></div></div>
+          </div>
+          <div><h3 class="sub">Motståndare</h3>
+          <div class="pick"><input class="pick__input" type="text" list="scout-champs" placeholder="Motståndare 1" autocomplete="off" data-pick="enemies:0" aria-label="Motståndare 1"><div data-pick-out="enemies:0"></div></div>
+          <div class="pick"><input class="pick__input" type="text" list="scout-champs" placeholder="Motståndare 2" autocomplete="off" data-pick="enemies:1" aria-label="Motståndare 2"><div data-pick-out="enemies:1"></div></div>
+          <div class="pick"><input class="pick__input" type="text" list="scout-champs" placeholder="Motståndare 3" autocomplete="off" data-pick="enemies:2" aria-label="Motståndare 3"><div data-pick-out="enemies:2"></div></div>
+          <div class="pick"><input class="pick__input" type="text" list="scout-champs" placeholder="Motståndare 4" autocomplete="off" data-pick="enemies:3" aria-label="Motståndare 4"><div data-pick-out="enemies:3"></div></div>
+          <div class="pick"><input class="pick__input" type="text" list="scout-champs" placeholder="Motståndare 5" autocomplete="off" data-pick="enemies:4" aria-label="Motståndare 5"><div data-pick-out="enemies:4"></div></div>
+          </div>
+        </div>
+        <button type="button" class="btn btn--ghost" data-action="clear-picks">Rensa champ select</button>
+        <datalist id="scout-champs" data-scout-champs></datalist>
+      </section>
+
+      <section class="card">
+        <h2 class="card__title">Alla champions</h2>
+        <div class="scout__controls">
+          <div class="seg" data-scout-side>
+            <button type="button" data-scout-side="against">Mot</button>
+            <button type="button" data-scout-side="with">Med</button>
+          </div>
+          <input class="select scout__search" type="search" placeholder="Sök champion" data-scout-search aria-label="Sök champion">
+          <select class="select" data-scout-sort aria-label="Sortera">
+            <option value="games">Flest matcher</option>
+            <option value="best">Högst vinst</option>
+            <option value="worst">Lägst vinst</option>
+            <option value="name">Namn</option>
+          </select>
+        </div>
+        <div data-scout></div>
+      </section>
     </div>
 
     <!-- ============ EARLY GAME ============ -->

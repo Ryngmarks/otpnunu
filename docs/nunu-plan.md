@@ -230,6 +230,7 @@ Dev-servern kör den riktiga webbsidan och den riktiga Edge Function-koden mot e
 - [ ] Kör `supabase/nunu/005_ganks.sql` (gank-analys, se `docs/nunu-early-game.md`).
 - [ ] Kör `supabase/nunu/006_early.sql` (early game, synergier, matchups).
 - [ ] Kör `supabase/nunu/007_rank.sql` (rank-historik / elo).
+- [ ] Kör `supabase/nunu/008_scout.sql` (Live Scout: egna bedömningar).
 - [ ] Skapa en Supabase access token (*Account → Access Tokens*) och lägg in den som GitHub-secret
       `SUPABASE_ACCESS_TOKEN` – eller välj manuell driftsättning.
 - [ ] Ansök om en **Personal API Key** hos Riot (*Register Product*). Utvecklingsnyckeln gäller bara
@@ -280,3 +281,21 @@ Riot har ingen rank-historik i API:t – bara nuvarande rank (league-v4, Solo/Du
 en rad i `nunu.rank_snapshot` när ranken ändrats sedan förra synken, så grafen *Rank över tid* börjar vid
 första synken efter `007_rank.sql` och fylls på varje timme. Rank räknas om till ett tal (100 per division,
 Iron IV 0 LP = 0; Master och uppåt fortsätter med LP) för att kunna ritas som en linje.
+
+## Live Scout
+
+Fliken *Scout* bygger på samma matcher och filter som resten av sidan (`account_match.allies/enemies`,
+alla köer på Rift som standard, Solo/Duo, Flex och Normal via filtret). Inga extra anrop till Riot.
+Alla champions du spelat med eller mot visas, även med 1 match – få matcher markeras, döljs aldrig:
+osäkert underlag under 5 matcher, begränsat 5–14, stabilt från 15.
+
+Din egen bedömning (👍/👎) och anteckning sparas i `nunu.champion_opinion` (008_scout.sql, radskydd
+per profil). Färgen jämför bedömningen med statistiken – vinst mot din vinst totalt, ±5 procentenheter
+räknas som en tydlig signal, och bara från 5 matcher:
+
+- **Grön** – positiv bedömning, statistiken stödjer den
+- **Röd** – negativ bedömning, statistiken stödjer den
+- **Orange** – bedömning och statistik säger emot varandra
+- **Grå** – ingen bedömning, för lite underlag eller neutral statistik
+
+Champ select: skriv in ditt lag och motståndarna; valen sparas i webbläsaren tills du rensar.

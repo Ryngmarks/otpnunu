@@ -300,3 +300,59 @@ test('översikt: nyckeltal, insikter och guldgraf', async () => {
   assert.doesNotMatch(gl, /NaN|undefined/);
   assert.deepEqual(s.insights([]), []);
 });
+
+test('Live Scout: alla champions räknas, även med 1 match, och färgen följer bedömning mot statistik', async () => {
+  const s = await import('../js/career/stats.js');
+  const v = await import('../js/career/view.js');
+  const g = (win, allies, enemies) => ({ win, allies, enemies });
+  // Baslinje 45 % (5 V, 6 F). Mot 64: 1 V 5 F (17 %). Mot 7: 4 V 1 F (80 %). Mot 99: 1 match.
+  const rows = [
+    g(false, [22], [64]), g(false, [22], [64]), g(false, [22], [64]), g(false, [22], [64]), g(false, [22], [64]),
+    g(true, [22], [64, 7]), g(true, [22], [7]), g(true, [22], [7]), g(true, [22], [7]), g(false, [22], [7]),
+    { win: true, allies: null, enemies: null }, // matcher utan lagdata räknas inte med i baslinjen
+  ];
+  rows.push(g(true, [22], [99]));
+  assert.deepEqual(s.championTally(rows, 'enemies').find((t) => t.championId === 99), { championId: 99, games: 1, wins: 1, losses: 0, winrate: 100 });
+
+  const opinions = [
+    { champion_id: 64, side: 'against', opinion: -1, note: 'Kitar ut mig' },
+    { champion_id: 7, side: 'against', opinion: -1, note: '' },
+    { champion_id: 99, side: 'against', opinion: 1, note: '' },
+    { champion_id: 1, side: 'against', opinion: 1, note: 'Aldrig mött' },
+    { champion_id: 64, side: 'with', opinion: 1, note: '' },
+  ];
+  const t = s.scoutTable(rows, opinions, 'against');
+  assert.equal(t.games, 11);
+  assert.equal(t.baseline, 45);
+  const by = Object.fromEntries(t.list.map((e) => [e.championId, e]));
+  assert.equal(by[64].color, 'red');          // negativ + statistiken håller med
+  assert.equal(by[64].support, 'begränsat');
+  assert.equal(by[64].note, 'Kitar ut mig');
+  assert.equal(by[7].color, 'orange');        // negativ men 80 % vinst
+  assert.equal(by[99].color, 'gray');         // 1 match: för lite underlag
+  assert.equal(by[99].support, 'osäkert');
+  assert.equal(by[1].games, 0);               // bedömning utan matcher visas ändå
+  assert.equal(t.list[0].championId, 64);     // flest matcher först
+
+  assert.equal(s.scoutColor(1, 'pos'), 'green');
+  assert.equal(s.scoutColor(null, 'pos'), 'gray');
+  assert.equal(s.scoutColor(1, 'jämnt'), 'gray');
+  assert.equal(s.scoutSignal({ games: 4, winrate: 100 }, 50), null);
+  assert.equal(s.scoutSupport(15), 'stabilt');
+
+  const picks = s.scoutPicks(t, [64, 555]);
+  assert.equal(picks[0].championId, 64);
+  assert.equal(picks[1].games, 0);
+  assert.equal(picks[1].color, 'gray');
+
+  const champs = { name: (id) => `C${id}`, icon: () => null };
+  const html = v.scoutHtml(t, champs);
+  assert.match(html, /Röd · svår, statistiken håller med/);
+  assert.match(html, /Orange · statistiken säger emot/);
+  assert.match(html, /Osäkert underlag/);
+  assert.match(html, /aria-pressed="true"/);
+  assert.match(v.scoutHtml(t, champs, { color: 'orange' }), /C7/);
+  assert.doesNotMatch(v.scoutHtml(t, champs, { color: 'orange' }), /C64/);
+  assert.match(v.scoutPickHtml(picks[0], champs, 'against', t.baseline), /Kitar ut mig/);
+  assert.equal(s.scoutTable(rows, opinions, 'with').list.find((e) => e.championId === 64).color, 'gray');
+});

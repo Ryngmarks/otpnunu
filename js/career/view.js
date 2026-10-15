@@ -2,7 +2,7 @@
  * otpnunu – rendering. Funktioner som tar data och returnerar HTML.
  * Allt som kommer utifrån (namn, Riot ID) escapas.
  */
-import { queueLabel, eloTicks } from './stats.js';
+import { queueLabel, eloTicks, SCOUT } from './stats.js';
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const num = (n) => (n == null ? '–' : Number(n).toLocaleString('sv-SE'));
@@ -284,7 +284,7 @@ const splitList = (list, champs, empty = 'För få matcher.') => (list.length
       <li>
         ${champIcon(champs, c.championId)}
         <span class="champbars__main">
-          <span class="champbars__head"><span><span class="opponents__name">${esc(champs.name(c.championId))}</span> <small class="muted">· ${c.games} matcher</small></span>
+          <span class="champbars__head"><span><span class="opponents__name">${esc(champs.name(c.championId))}</span> <small class="muted">· ${c.games} matcher</small>${c.games < SCOUT.minGames ? ' <small class="badge badge--unsure">osäkert</small>' : ''}</span>
             <small class="muted">${c.wins} V – ${c.losses} F</small></span>
           <span class="splitbar" role="img" aria-label="${c.winrate} % vinst, ${100 - c.winrate} % förlust">${c.wins ? `<i class="is-good" style="flex:${c.wins}"></i>` : ''}${c.losses ? `<i class="is-bad" style="flex:${c.losses}"></i>` : ''}</span>
           <span class="splitbar__pct"><span class="wr wr--good">${c.winrate}% vinst</span><span class="wr wr--bad">${100 - c.winrate}% förlust</span></span>
@@ -472,4 +472,86 @@ export function goldLineHtml(rep) {
       ${end(win, 'Vinster', yw)}${end(loss, 'Förluster', yl)}
     </svg>
     <p class="legend"><span><i class="sw is-win"></i>Vinster</span><span><i class="sw is-loss"></i>Förluster</span><span>Streckad linje = lika mycket guld</span></p>`;
+}
+
+/* ---------------- Live Scout ---------------- */
+
+const SUPPORT_LABEL = { stabilt: 'Stabilt underlag', begränsat: 'Begränsat underlag', osäkert: 'Osäkert underlag' };
+
+/** Färgens betydelse i klartext – färgen står aldrig ensam. */
+export function scoutLabel(e) {
+  if (e.color === 'green') return 'Grön · bra, statistiken håller med';
+  if (e.color === 'red') return 'Röd · svår, statistiken håller med';
+  if (e.color === 'orange') return 'Orange · statistiken säger emot';
+  if (!e.opinion) return 'Grå · ingen bedömning';
+  return e.signal === 'jämnt' ? 'Grå · statistiken är neutral' : 'Grå · för lite statistik';
+}
+
+const scoutStats = (e, baseline) => (e.games
+  ? `<span class="scout__nums"><b>${e.winrate} %</b> <span class="muted">${e.wins} V – ${e.losses} F · ${e.games} ${e.games === 1 ? 'match' : 'matcher'}</span>${e.diff == null || baseline == null ? '' : ` <span class="${e.diff >= 0 ? 'pos' : 'neg'}">${e.diff >= 0 ? '+' : '−'}${Math.abs(e.diff)}</span>`}</span>
+    <span class="splitbar" role="img" aria-label="${e.winrate} % vinst">${e.wins ? `<i class="is-good" style="flex:${e.wins}"></i>` : ''}${e.losses ? `<i class="is-bad" style="flex:${e.losses}"></i>` : ''}</span>`
+  : '<span class="scout__nums muted">Inga matcher än</span>');
+
+const opinionBtns = (e, side) => `
+  <span class="scout__vote" role="group" aria-label="Din bedömning">
+    <button type="button" class="vote vote--up" data-opinion="1" data-champ="${e.championId}" data-side="${side}" aria-pressed="${e.opinion === 1}" title="Bra ${side === 'with' ? 'att ha med mig' : 'att möta'}">👍</button>
+    <button type="button" class="vote vote--down" data-opinion="-1" data-champ="${e.championId}" data-side="${side}" aria-pressed="${e.opinion === -1}" title="Svår ${side === 'with' ? 'att ha med mig' : 'att möta'}">👎</button>
+  </span>`;
+
+function scoutRow(e, champs, side, baseline) {
+  return `
+    <li class="scout__row scout--${e.color}">
+      ${champIcon(champs, e.championId)}
+      <div class="scout__main">
+        <div class="scout__head">
+          <span class="opponents__name">${esc(champs.name(e.championId))}</span>
+          <span class="scout__tag"><i class="scout__dot" aria-hidden="true"></i>${esc(scoutLabel(e))}</span>
+          ${e.support === 'stabilt' ? '' : `<small class="badge ${e.support === 'osäkert' ? 'badge--unsure' : ''}">${SUPPORT_LABEL[e.support]}</small>`}
+        </div>
+        ${scoutStats(e, baseline)}
+        <input class="scout__note" type="text" maxlength="500" placeholder="Egen anteckning…" value="${esc(e.note)}"
+          data-note data-champ="${e.championId}" data-side="${side}" aria-label="Anteckning om ${esc(champs.name(e.championId))}">
+      </div>
+      ${opinionBtns(e, side)}
+    </li>`;
+}
+
+const SCOUT_SORTS = {
+  games: (a, b) => b.games - a.games || (b.winrate ?? -1) - (a.winrate ?? -1),
+  best: (a, b) => (b.winrate ?? -1) - (a.winrate ?? -1) || b.games - a.games,
+  worst: (a, b) => (a.winrate ?? 101) - (b.winrate ?? 101) || b.games - a.games,
+};
+
+/** Hela listan för Med/Mot, med sök, färgfilter och sortering. */
+export function scoutHtml(table, champs, { q = '', color = '', sort = 'games', limit = 40 } = {}) {
+  if (!table.games && !table.list.length) return '<p class="empty">Inga matcher med lagdata än – synka för att fylla på.</p>';
+  const needle = q.trim().toLowerCase();
+  const counts = { green: 0, red: 0, orange: 0, gray: 0 };
+  table.list.forEach((e) => { counts[e.color] += 1; });
+  let list = table.list.filter((e) => !needle || champs.name(e.championId).toLowerCase().includes(needle));
+  if (color) list = list.filter((e) => e.color === color);
+  list = sort === 'name'
+    ? [...list].sort((a, b) => champs.name(a.championId).localeCompare(champs.name(b.championId)))
+    : [...list].sort(SCOUT_SORTS[sort] || SCOUT_SORTS.games);
+  const chip = (k, label) => `<button type="button" data-scout-color="${k}" class="${color === k ? 'is-active' : ''}">${k ? `<i class="scout__dot scout--${k}" aria-hidden="true"></i>` : ''}${label}${k ? ` <small>${counts[k]}</small>` : ''}</button>`;
+  return `
+    <p class="card__hint">${table.games} matcher · ${table.list.length} champions · din vinst totalt ${table.baseline ?? '–'} % · +/− = skillnad mot den</p>
+    <div class="chips scout__colors">${chip('', 'Alla')}${chip('green', 'Grön')}${chip('red', 'Röd')}${chip('orange', 'Orange')}${chip('gray', 'Grå')}</div>
+    ${list.length ? `<ul class="scout__list">${list.slice(0, limit).map((e) => scoutRow(e, champs, table.side, table.baseline)).join('')}</ul>` : '<p class="empty">Ingen champion matchar.</p>'}
+    ${list.length > limit ? `<button type="button" class="btn btn--ghost btn--block" data-scout-more>Visa fler (${list.length - limit} till)</button>` : ''}`;
+}
+
+/** Kompakt rad under en vald champion i champ select. */
+export function scoutPickHtml(e, champs, side, baseline) {
+  if (!e) return '';
+  return `
+    <div class="scout__pick scout--${e.color}">
+      <div class="scout__head">
+        <span class="scout__tag"><i class="scout__dot" aria-hidden="true"></i>${esc(scoutLabel(e))}</span>
+        ${e.support === 'stabilt' ? '' : `<small class="badge ${e.support === 'osäkert' ? 'badge--unsure' : ''}">${SUPPORT_LABEL[e.support]}</small>`}
+        ${opinionBtns(e, side)}
+      </div>
+      ${scoutStats(e, baseline)}
+      ${e.note ? `<p class="scout__memo">“${esc(e.note)}”</p>` : ''}
+    </div>`;
 }

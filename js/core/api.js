@@ -139,6 +139,13 @@ export function createApi({ url, key, storage = window.localStorage, fetchImpl =
     mastery: () => rest('mastery?select=puuid,champion_id,level,points,last_play_time'),
     seasonHistory: () => rest('season_history?select=season,champion_id,games,wins,kills,deaths,assists,ended'),
     ranks: () => all('rank_snapshot?select=puuid,queue,tier,division,lp,wins,losses,taken_at&order=taken_at'),
+    /* Live Scout: egna bedömningar per champion (008_scout.sql) */
+    opinions: () => rest('champion_opinion?select=champion_id,side,opinion,note'),
+    saveOpinion: (row) => rest('champion_opinion?on_conflict=profile_id,champion_id,side', {
+      method: 'POST', body: row, prefer: 'resolution=merge-duplicates,return=minimal',
+    }),
+    deleteOpinion: (championId, side) =>
+      rest(`champion_opinion?champion_id=eq.${Number(championId)}&side=eq.${encodeURIComponent(side)}`, { method: 'DELETE' }),
     deaths: () => all('death?select=puuid,match_id,t_ms,killer_champion_id,helper_champion_ids,places&order=match_id'),
 
     /* ---- Edge Function ---- */

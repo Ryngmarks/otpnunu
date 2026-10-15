@@ -188,7 +188,7 @@ export function createStore() {
     'johan@nik.se': { id: 'aaaaaaaa-0000-0000-0000-000000000001', password: 'nunu123' },
     'anna@nik.se': { id: 'bbbbbbbb-0000-0000-0000-000000000002', password: 'nunu123' },
   };
-  const t = { member: [{ user_id: users['johan@nik.se'].id }], profile: [], riot_account: [], raw_match: new Map(), account_match: [], mastery: [], death: [], storage: new Map(), rank_snapshot: [] };
+  const t = { member: [{ user_id: users['johan@nik.se'].id }], profile: [], riot_account: [], raw_match: new Map(), account_match: [], mastery: [], death: [], storage: new Map(), rank_snapshot: [], champion_opinion: [] };
   // Påhittad rank-historik för Rymm3n (30 dagar), så att elo-grafen syns i dev
   const RP = 'p'.repeat(70) + 'rymm3n01';
   const climb = [[2160, 0], [2195, 2], [2230, 4], [2190, 6], [2250, 8], [2290, 11], [2270, 13], [2330, 16], [2310, 19], [2360, 22], [2405, 25], [2364, 28]];
@@ -256,6 +256,7 @@ export function createStore() {
     death: (uid) => t.death.filter((r) => ownPuuids(uid).includes(r.puuid)),
     rank_snapshot: (uid) => t.rank_snapshot.filter((r) => ownPuuids(uid).includes(r.puuid)),
     season_history: (uid) => t.season_history.filter((r) => r.user_id === uid),
+    champion_opinion: (uid) => t.champion_opinion.filter((r) => ownProfiles(uid).includes(r.profile_id)),
   };
 
   return { users, t, tokens, db, visible };
@@ -354,6 +355,19 @@ export function createDevServer({ port = 8787, riot = createFakeRiot(), store = 
       if (req.method === 'PATCH' && table === 'profile') {
         const row = store.visible.profile(uid).find((x) => x.id === eq('id'));
         if (row) Object.assign(row, JSON.parse(await readBody(req)));
+        return send(res, 204);
+      }
+      // Egen bedömning (008_scout.sql): upsert på (profile_id, champion_id, side)
+      if (req.method === 'POST' && table === 'champion_opinion') {
+        const row = JSON.parse(await readBody(req));
+        if (!store.visible.profile(uid).some((x) => x.id === row.profile_id)) return send(res, 403, { message: 'new row violates row-level security policy' });
+        const key = (r) => `${r.profile_id}|${r.champion_id}|${r.side}`;
+        store.t.champion_opinion = store.t.champion_opinion.filter((r) => key(r) !== key(row)).concat({ note: '', ...row, updated_at: new Date().toISOString() });
+        return send(res, 201);
+      }
+      if (req.method === 'DELETE' && table === 'champion_opinion') {
+        const mine = store.visible.champion_opinion(uid);
+        store.t.champion_opinion = store.t.champion_opinion.filter((r) => !(mine.includes(r) && String(r.champion_id) === eq('champion_id') && r.side === eq('side')));
         return send(res, 204);
       }
       if (req.method === 'DELETE' && table === 'riot_account') {

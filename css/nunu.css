@@ -511,3 +511,50 @@ body.is-locked .bg {
 .splitbar__pct { display: flex; justify-content: space-between; font-size: 12.5px; }
 .champbars--split li { align-items: start; }
 .splitbar__pct .wr { font-size: 13px; }
+
+/* ---------- Live Scout ----------
+   Egna färger, skilda från vinst (is-blå) och förlust (ember). Alltid med text bredvid. */
+:root { --scout-green: #4fd18b; --scout-red: #ff5d6c; --scout-orange: #ffb020; --scout-gray: #8b97b3; }
+.badge { display: inline-block; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.badge--unsure { border-style: dashed; border-color: rgba(255, 176, 32, .5); color: #ffd27a; }
+.scout__dot { display: inline-block; flex: none; width: 10px; height: 10px; margin-right: 6px; border-radius: 50%; background: var(--scout-c, var(--scout-gray)); vertical-align: -1px; }
+.scout--green { --scout-c: var(--scout-green); }
+.scout--red { --scout-c: var(--scout-red); }
+.scout--orange { --scout-c: var(--scout-orange); }
+.scout--gray { --scout-c: var(--scout-gray); }
+.scout__legend { display: grid; gap: 4px; margin: 0 0 6px; font-size: 12.5px; color: var(--muted); }
+.scout__controls { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.scout__controls .select { height: 40px; font-size: 14px; background-color: var(--surface); }
+.scout__search { flex: 1 1 160px; min-width: 0; background-image: none; padding-right: 12px; }
+.scout__colors { margin-bottom: 12px; }
+.scout__colors button small { color: var(--muted); font-weight: 600; }
+.scout__list { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 8px; }
+.scout__row { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 10px 10px 10px 12px; border-radius: 12px; background: rgba(255, 255, 255, .025); border: 1px solid var(--line); border-left: 4px solid var(--scout-c); }
+.scout__row .champ { width: 38px; height: 38px; }
+.scout__main { display: grid; gap: 6px; min-width: 0; font-size: 14px; }
+.scout__head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.scout__tag { display: inline-flex; align-items: center; font-size: 12.5px; color: var(--text); }
+.scout__nums b { font-size: 15px; }
+.scout__nums small, .scout__nums .muted { font-size: 13px; }
+.scout__note { width: 100%; min-width: 0; height: 34px; padding: 0 10px; border-radius: 8px; border: 1px solid transparent; background: rgba(255, 255, 255, .04); font-size: 13px; color: var(--text); }
+.scout__note:hover { border-color: var(--line); }
+.scout__note:focus { outline: none; border-color: var(--ice-strong); }
+.scout__vote { display: flex; gap: 4px; }
+.vote { width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); font-size: 17px; line-height: 1; filter: grayscale(1); opacity: .55; cursor: pointer; transition: opacity .15s, filter .15s, background .15s; }
+.vote:hover { opacity: .9; }
+.vote[aria-pressed="true"] { filter: none; opacity: 1; }
+.vote--up[aria-pressed="true"] { background: rgba(79, 209, 139, .18); border-color: var(--scout-green); }
+.vote--down[aria-pressed="true"] { background: rgba(255, 93, 108, .18); border-color: var(--scout-red); }
+.picks .pick { display: grid; gap: 6px; margin-bottom: 10px; }
+.pick__input { width: 100%; min-width: 0; height: 42px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255, 255, 255, .04); font-size: 15px; }
+.pick__input:focus { outline: none; border-color: var(--ice-strong); }
+.scout__pick { display: grid; gap: 6px; padding: 8px 10px; border-radius: 10px; border-left: 4px solid var(--scout-c); background: rgba(255, 255, 255, .025); font-size: 14px; }
+.scout__pick .scout__vote { margin-left: auto; }
+.scout__pick .vote { width: 34px; height: 34px; font-size: 15px; }
+.scout__memo { margin: 0; font-size: 13px; color: var(--muted); font-style: italic; overflow-wrap: anywhere; }
+@media (max-width: 420px) {
+  .scout__row { grid-template-columns: 32px minmax(0, 1fr); }
+  .scout__row .champ { width: 32px; height: 32px; }
+  .scout__row .scout__vote { grid-column: 2; }
+}
+@media (min-width: 900px) { .scout__list { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

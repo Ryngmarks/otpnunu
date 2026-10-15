@@ -334,27 +334,32 @@ export function earlyReport(rows) {
 }
 
 /**
- * Modul 3: lagkamrater och motståndare (champions) med vinst och förlust. Bara champions med minst
- * minGames matcher. mostAllies/mostEnemies är de man spelat flest matcher med/mot.
+ * Vinst och förlust per champion i lagkamraternas (key = 'allies') eller motståndarnas ('enemies')
+ * lag. Alla champions räknas, även med en enda match.
  */
-export function synergyReport(rows, { minGames = 5, limit = 5, mostLimit = 8 } = {}) {
+export function championTally(rows, key) {
+  const map = new Map();
+  for (const r of rows) {
+    if (!Array.isArray(r[key])) continue;
+    for (const id of r[key]) {
+      const t = map.get(id) || { championId: id, games: 0, wins: 0 };
+      t.games++;
+      if (r.win) t.wins++;
+      map.set(id, t);
+    }
+  }
+  return [...map.values()].map((t) => ({ ...t, losses: t.games - t.wins, winrate: pct(t.wins, t.games) }));
+}
+
+/**
+ * Modul 3: lagkamrater och motståndare (champions) med vinst och förlust. mostAllies/mostEnemies
+ * är de man spelat flest matcher med/mot. minGames gäller bäst/sämst-listorna (insikterna).
+ */
+export function synergyReport(rows, { minGames = 1, limit = 5, mostLimit = 8 } = {}) {
   const games = rows.filter((r) => Array.isArray(r.allies) && Array.isArray(r.enemies));
   if (!games.length) return null;
-  const tally = (key) => {
-    const map = new Map();
-    for (const r of games) {
-      for (const id of r[key]) {
-        const t = map.get(id) || { championId: id, games: 0, wins: 0 };
-        t.games++;
-        if (r.win) t.wins++;
-        map.set(id, t);
-      }
-    }
-    return [...map.values()].filter((t) => t.games >= minGames)
-      .map((t) => ({ ...t, losses: t.games - t.wins, winrate: pct(t.wins, t.games) }));
-  };
-  const allies = tally('allies');
-  const enemies = tally('enemies');
+  const allies = championTally(games, 'allies').filter((t) => t.games >= minGames);
+  const enemies = championTally(games, 'enemies').filter((t) => t.games >= minGames);
   const best = (list) => [...list].sort((a, b) => b.winrate - a.winrate || b.games - a.games).slice(0, limit);
   const worst = (list) => [...list].sort((a, b) => a.winrate - b.winrate || b.games - a.games).slice(0, limit);
   const most = (list) => [...list].sort((a, b) => b.games - a.games || b.winrate - a.winrate).slice(0, mostLimit);
@@ -369,6 +374,85 @@ export function synergyReport(rows, { minGames = 5, limit = 5, mostLimit = 8 } =
     easiestEnemies: best(enemies),
     hardestEnemies: worst(enemies),
   };
+}
+
+/* ---------------- Live Scout ---------------- */
+
+/**
+ * Gränser för Live Scout. Alla matcher räknas alltid; underlaget avgör bara hur säkert det är.
+ *   minGames: färre matcher = osäkert underlag (grått, statistiken kan inte stödja eller motsäga)
+ *   solidGames: så många matcher = stabilt underlag
+ *   margin: procentenheter från din vinst totalt som räknas som en tydlig skillnad
+ */
+export const SCOUT = { minGames: 5, solidGames: 15, margin: 5 };
+export const SCOUT_SIDES = { with: 'allies', against: 'enemies' };
+
+/** Underlaget för en champion: 'osäkert' (1–4), 'begränsat' (5–14) eller 'stabilt' (15+). */
+export function scoutSupport(games) {
+  if (games >= SCOUT.solidGames) return 'stabilt';
+  if (games >= SCOUT.minGames) return 'begränsat';
+  return 'osäkert';
+}
+
+/** Vad statistiken säger jämfört med din vinst totalt: 'pos', 'neg', 'jämnt' eller null (för lite underlag). */
+export function scoutSignal(entry, baseline) {
+  if (!entry || entry.games < SCOUT.minGames || baseline == null) return null;
+  const d = entry.winrate - baseline;
+  if (d >= SCOUT.margin) return 'pos';
+  if (d <= -SCOUT.margin) return 'neg';
+  return 'jämnt';
+}
+
+/**
+ * Färg för en champion: din bedömning (1 = positiv, -1 = negativ, null = ingen) mot statistiken.
+ *   green  – positiv bedömning som statistiken stödjer
+ *   red    – negativ bedömning som statistiken stödjer
+ *   orange – bedömningen och statistiken säger emot varandra
+ *   gray   – bedömning eller tydligt statistiskt underlag saknas
+ */
+export function scoutColor(opinion, signal) {
+  if (!opinion || !signal || signal === 'jämnt') return 'gray';
+  const pos = opinion > 0;
+  if (pos && signal === 'pos') return 'green';
+  if (!pos && signal === 'neg') return 'red';
+  return 'orange';
+}
+
+/**
+ * Alla champions du spelat med (side 'with') eller mot ('against'), med vinster, förluster,
+ * underlag, din bedömning och färg. opinions: [{ champion_id, side, opinion, note }].
+ */
+export function scoutTable(rows, opinions = [], side = 'against') {
+  const games = rows.filter((r) => Array.isArray(r.allies) && Array.isArray(r.enemies));
+  const baseline = games.length ? winrateOf(games).winrate : null;
+  const own = new Map(opinions.filter((o) => o.side === side).map((o) => [o.champion_id, o]));
+  const byId = new Map(championTally(games, SCOUT_SIDES[side]).map((t) => [t.championId, t]));
+  // Champions du har en bedömning om men aldrig mött visas också (grått, 0 matcher)
+  for (const id of own.keys()) if (!byId.has(id)) byId.set(id, { championId: id, games: 0, wins: 0, losses: 0, winrate: null });
+  const list = [...byId.values()].map((t) => {
+    const o = own.get(t.championId);
+    const opinion = o ? o.opinion : null;
+    const signal = scoutSignal(t, baseline);
+    return {
+      ...t,
+      diff: t.winrate == null || baseline == null ? null : t.winrate - baseline,
+      support: scoutSupport(t.games),
+      opinion,
+      note: o ? o.note || '' : '',
+      signal,
+      color: scoutColor(opinion, signal),
+    };
+  }).sort((a, b) => b.games - a.games || (b.winrate ?? -1) - (a.winrate ?? -1));
+  return { side, games: games.length, baseline, list };
+}
+
+/** Uppslag för champ select: en rad per vald champion (även okända, med 0 matcher). */
+export function scoutPicks(table, ids) {
+  const byId = new Map(table.list.map((e) => [e.championId, e]));
+  return ids.filter((id) => id != null).map((id) => byId.get(id) || {
+    championId: id, games: 0, wins: 0, losses: 0, winrate: null, diff: null,
+    support: 'osäkert', opinion: null, note: '', signal: null, color: 'gray',
+  });
 }
 
 /** Grovt: motståndarlaget räknas som "tung" i en typ om minst två champions har den som första tagg. */
@@ -548,7 +632,7 @@ export function insights(rows, { minGames = 10 } = {}) {
   const worst = [...ok].sort((a, b) => a.winrate - b.winrate)[0];
   if (best && best.winrate > base) out.push({ tone: 'up', text: `${best.text} → ${best.winrate} % vinst (${best.games} matcher, mot ${base} % totalt).` });
   if (worst && worst !== best && worst.winrate < base) out.push({ tone: 'down', text: `${worst.text} → ${worst.winrate} % vinst (${worst.games} matcher).` });
-  const syn = synergyReport(rows);
+  const syn = synergyReport(rows, { minGames: 5 });
   if (syn) {
     const hard = syn.hardestEnemies[0];
     const friend = syn.bestAllies[0];

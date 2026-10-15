@@ -28,5 +28,7 @@ export async function loadChampions({ base = 'https://ddragon.leagueoflegends.co
     icon: (id) => (data && data.byId[id] ? `${base}/cdn/${data.version}/img/champion/${data.byId[id].image}` : null),
     /** Riots grova klassning: Tank, Fighter, Mage, Assassin, Marksman, Support. */
     tags: (id) => (data && data.byId[id] && data.byId[id].tags) || [],
+    /** Alla champions, sorterade på namn – för sökning i Scout. */
+    all: () => (data ? Object.entries(data.byId).map(([id, c]) => ({ id: Number(id), name: c.name })).sort((a, b) => a.name.localeCompare(b.name)) : []),
   };
 }

@@ -42,3 +42,7 @@ $PSQL -d "$DB" -Atc "select 'EARLY-TESTER GODKÄNDA' where (select count(*) from
 PGOPTIONS='-c client_min_messages=warning' $PSQL -d "$DB" -f ../007_rank.sql
 PGOPTIONS='-c client_min_messages=warning' $PSQL -d "$DB" -f ../007_rank.sql
 $PSQL -d "$DB" -f 007_rank_test.sql 2>&1 | sed -n 's/^psql:[^ ]* \(NOTICE\|ERROR\):  //p; /GODKÄNDA/p'
+# Live Scout: två gånger (ska gå att köra om)
+PGOPTIONS='-c client_min_messages=warning' $PSQL -d "$DB" -f ../008_scout.sql
+PGOPTIONS='-c client_min_messages=warning' $PSQL -d "$DB" -f ../008_scout.sql
+$PSQL -d "$DB" -f 008_scout_test.sql 2>&1 | sed -n 's/^psql:[^ ]* \(NOTICE\|ERROR\):  //p; /GODKÄNDA/p'
