@@ -63,6 +63,7 @@ export async function findLiveGame({ riot, accounts, deep = false, fixPlatform =
     checks.push(check);
     try {
       let game = await riot.activeGame(account.platform, account.puuid);
+      if (!game) check.riot = `404 ${riot.lastNotFound || ''}`.trim();
       let used = account;
       if (!game && deep && riot.accountRegion) {
         const region = regionFor(account.platform);
@@ -76,6 +77,7 @@ export async function findLiveGame({ riot, accounts, deep = false, fixPlatform =
         if (puuid !== account.puuid || platform !== account.platform) {
           used = { ...account, puuid, platform };
           game = await riot.activeGame(platform, puuid);
+          if (!game) check.riot = `404 ${riot.lastNotFound || ''}`.trim();
         }
       }
       if (!game) continue;

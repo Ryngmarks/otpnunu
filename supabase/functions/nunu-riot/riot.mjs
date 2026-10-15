@@ -49,6 +49,7 @@ export function createRiot({
   if (!apiKey) throw new HttpError(500, 'RIOT_API_KEY saknas i Edge Function');
   let last = 0;
   let count = 0;
+  let notFound = '';
 
   async function get(url, { allow404 = false } = {}) {
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -63,7 +64,12 @@ export function createRiot({
         await sleep(retryAfter * 1000);
         continue;
       }
-      if (res.status === 404 && allow404) return null;
+      if (res.status === 404 && allow404) {
+        // Riots förklaring sparas för felsökning (t.ex. "Data not found - spectator game info isn't found")
+        const body = await res.json().catch(() => ({}));
+        notFound = (body && body.status && body.status.message) || 'Data not found';
+        return null;
+      }
       if (res.status === 401 || res.status === 403) {
         const err = new HttpError(502, 'Riot-nyckeln är ogiltig eller har gått ut');
         err.riotStatus = res.status;  // 403 kan också betyda att nyckeln saknar åtkomst till just det API:t
@@ -85,6 +91,8 @@ export function createRiot({
 
   return {
     get requestCount() { return count; },
+    /** Riots meddelande vid senaste 404. */
+    get lastNotFound() { return notFound; },
 
     accountByRiotId: (region, gameName, tagLine) =>
       get(`${regional(region)}/riot/account/v1/accounts/by-riot-id/${enc(gameName)}/${enc(tagLine)}`, { allow404: true }),
