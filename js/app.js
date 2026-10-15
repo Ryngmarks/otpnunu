@@ -5,7 +5,7 @@ import { createApi, ApiError } from './core/api.js';
 import { loadChampions, loadExtras } from './core/ddragon.js';
 import { NUNU, QUEUE_FILTERS, filterMatches, summarize, recentForm, byAccount, opponents, masterySummary, careerSummary, damageReport, gankReport, earlyReport, synergyReport, matchupReport, impactReport, eloSeries, overviewKpis, insights, trendSeries, scoutTable, scoutPicks, libraryTable, championProfile, positionRows, hasPositions, matchReview, playbook } from './career/stats.js';
 import { mountMotion } from './career/motion.js';
-import { esc, heroHtml, tilesHtml, formHtml, accountsHtml, opponentsHtml, matchesHtml, careerHtml, damageHtml, gankHtml, earlyHtml, synergyHtml, matchupHtml, impactHtml, eloHtml, kpisHtml, insightsHtml, goldLineHtml, scoutHtml, scoutPickHtml, libraryHtml, championDetailHtml, championEditorHtml, matchReviewHtml, rvChartHtml, playbookHtml, playbookQuickHtml, liveHtml, gameClock } from './career/view.js';
+import { esc, heroHtml, tilesHtml, formHtml, accountsHtml, opponentsHtml, matchesHtml, careerHtml, damageHtml, gankHtml, earlyHtml, synergyHtml, matchupHtml, impactHtml, eloHtml, kpisHtml, insightsHtml, goldLineHtml, scoutHtml, scoutPickHtml, libraryHtml, championDetailHtml, championEditorHtml, matchReviewHtml, rvChartHtml, playbookHtml, playbookQuickHtml, liveHtml, liveIdleHtml, gameClock } from './career/view.js';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -33,7 +33,7 @@ const state = {
   review: null, // { puuid, matchId, metric } när matchgenomgången är öppen
   playbook: { championId: null }, // vald motståndarjungler
   pbEditorFor: null,
-  live: { data: null, appliedGameId: null, checkedAt: 0, busy: false, retryAt: 0 },
+  live: { data: null, appliedGameId: null, checkedAt: 0, busy: false, retryAt: 0, error: '' },
   reviews: new Map(), // hämtade matchgenomgångar (account_match.review)
   extras: null, // runor och summoner spells (laddas första gången en match öppnas)
   picks: { allies: [null, null, null, null], enemies: [null, null, null, null, null] },
@@ -242,6 +242,9 @@ function renderLive(rows) {
         : state.live.checkedAt ? `Ingen pågående match (kollat ${new Date(state.live.checkedAt).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })}). Riot visar matchen först när den laddats in.`
           : 'Kontrolleras automatiskt medan sidan är öppen.';
   }
+  const idle = $('[data-live-idle]');
+  idle.hidden = !!live;
+  if (!live) idle.innerHTML = liveIdleHtml({ busy: state.live.busy, checkedAt: state.live.checkedAt, accounts: state.accounts.length, error: state.live.error });
   if (!live) return;
   const tables = { with: scoutTable(rows, state.opinions, 'with'), against: scoutTable(rows, state.opinions, 'against') };
   box.innerHTML = liveHtml(live, state.champs, tables);
@@ -266,9 +269,10 @@ async function checkLive(manual = false) {
   if (state.live.busy || !state.accounts.length) return;
   if (!manual && Date.now() < state.live.retryAt) return;
   state.live.busy = true;
-  if (manual) render();
+  render();
   try {
     const r = await api.live();
+    state.live.error = '';
     const was = state.live.data;
     state.live.data = r.live || null;
     state.live.checkedAt = Date.now();
@@ -277,6 +281,9 @@ async function checkLive(manual = false) {
     else if (was) toast('Matchen är slut – synka om en stund för att se den i historiken');
     else if (manual) toast(r.retryAfter ? `Riot begränsar takten – försök igen om ${r.retryAfter} s` : 'Ingen pågående match just nu');
   } catch (err) {
+    // Visas i statusraden – t.ex. om Riot-nyckeln saknar åtkomst till spectator-API:t
+    state.live.error = err.message || 'kunde inte kolla';
+    state.live.checkedAt = Date.now();
     if (manual) fail(err);
   } finally {
     state.live.busy = false;
@@ -421,6 +428,8 @@ async function reload() {
   Object.assign(state, { accounts, matches, mastery, history, deaths, ranks, opinions });
   if (state.filters.account && !accounts.some((a) => a.puuid === state.filters.account)) state.filters.account = '';
   render();
+  // Första live-kollen direkt när det finns konton (t.ex. just efter att ett konto kopplats)
+  if (accounts.length && !state.live.checkedAt && liveTimer) checkLive();
 }
 
 /* ---------------- Synk ---------------- */

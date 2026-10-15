@@ -1041,6 +1041,18 @@ function duosHtml(pb, champs) {
 
 export const gameClock = (sec) => `${Math.floor(Math.max(0, sec) / 60)}:${String(Math.floor(Math.max(0, sec) % 60)).padStart(2, '0')}`;
 
+/** Kompakt rad när ingen match pågår, så att det syns att Live finns och när det senast kollades. */
+export function liveIdleHtml({ busy = false, checkedAt = 0, accounts = 0, error = '' } = {}) {
+  const time = checkedAt ? new Date(checkedAt).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' }) : null;
+  const text = busy ? 'Letar efter en pågående match…'
+    : error ? `Live: ${error}`
+      : !accounts ? 'Live: koppla ett konto först'
+        : time ? `Ingen pågående match · kollat ${time} på ${accounts} ${accounts === 1 ? 'konto' : 'konton'} · syns när laddningsskärmen startar`
+          : 'Live: kollar strax efter pågående match';
+  return `<span class="live-idle__dot ${busy ? 'is-busy' : ''}" aria-hidden="true"></span><span class="live-idle__text">${esc(text)}</span>
+    <button type="button" class="live-idle__btn" data-action="live-check"${busy ? ' disabled' : ''}>Kolla nu</button>`;
+}
+
 /** Livekortet: båda lagen som championkort med din historik och bedömning. tables = { with, against } (scoutTable). */
 export function liveHtml(live, champs, tables, now = Date.now()) {
   const look = (side, id) => tables[side].list.find((e) => e.championId === id)

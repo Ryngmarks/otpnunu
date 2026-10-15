@@ -929,3 +929,10 @@ body.is-locked .bg {
 .live-check { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 12px; font-size: 13px; }
 @media (max-width: 420px) { .live-pl { min-height: 86px; padding: 5px; } .live-pl__name { font-size: 11px; } .live-pl__wr { font-size: 9.5px; } }
 @media (prefers-reduced-motion: reduce) { .live__badge i, .live-pl { animation: none; } }
+
+.live-idle { display: flex; align-items: center; gap: 10px; margin: 12px 0 0; padding: 8px 8px 8px 14px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); font-size: 12.5px; color: var(--muted); }
+.live-idle__dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--scout-gray); }
+.live-idle__dot.is-busy { background: #ff5d6c; animation: live-pulse 1.2s ease-out infinite; }
+.live-idle__text { flex: 1 1 auto; min-width: 0; }
+.live-idle__btn { flex: none; padding: 6px 12px; border-radius: 999px; border: 1px solid rgba(255, 93, 108, .5); color: #ff9aa4; font: 700 13px var(--font-display); letter-spacing: .08em; text-transform: uppercase; }
+.live-idle__btn:hover { background: rgba(255, 93, 108, .12); }
