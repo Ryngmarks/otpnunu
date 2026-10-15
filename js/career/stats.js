@@ -469,6 +469,17 @@ const tallyOf = (list) => {
   return { games: w.games, wins: w.wins, losses: w.games - w.wins, winrate: w.winrate };
 };
 
+/**
+ * Bara motståndarens jungler: matcher där du spelade jungle, med motståndarlaget ersatt av
+ * jungler-motståndaren (opponent_champion_id). Samma motor räknar sedan som vanligt.
+ * Lagkamraternas positioner sparas inte, så filtret gäller bara motståndare.
+ */
+export function junglerRows(rows) {
+  return rows
+    .filter((r) => r.team_position === 'JUNGLE' && r.opponent_champion_id != null)
+    .map((r) => ({ ...r, enemies: [r.opponent_champion_id] }));
+}
+
 /** Matcherna där championen var lagkamrat (side 'with') eller motståndare ('against'), nyast först. */
 export function championGames(rows, championId, side) {
   const key = SCOUT_SIDES[side];

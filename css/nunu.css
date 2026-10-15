@@ -653,3 +653,5 @@ body.is-locked .bg {
 .lib-field input, .lib-field textarea { width: 100%; min-width: 0; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: rgba(255, 255, 255, .045); color: var(--text); font: inherit; font-size: 15px; resize: vertical; }
 .lib-field input:focus, .lib-field textarea:focus { outline: none; border-color: var(--ice-strong); box-shadow: 0 0 0 3px rgba(79, 180, 255, .18); }
 .lib-editor__hint { margin: 0; }
+.seg.is-disabled { opacity: .45; }
+.seg button:disabled { cursor: not-allowed; }

@@ -3,7 +3,7 @@
  */
 import { createApi, ApiError } from './core/api.js';
 import { loadChampions } from './core/ddragon.js';
-import { NUNU, QUEUE_FILTERS, filterMatches, summarize, recentForm, byAccount, opponents, masterySummary, careerSummary, damageReport, gankReport, earlyReport, synergyReport, matchupReport, impactReport, eloSeries, overviewKpis, insights, scoutTable, scoutPicks, libraryTable, championProfile } from './career/stats.js';
+import { NUNU, QUEUE_FILTERS, filterMatches, summarize, recentForm, byAccount, opponents, masterySummary, careerSummary, damageReport, gankReport, earlyReport, synergyReport, matchupReport, impactReport, eloSeries, overviewKpis, insights, scoutTable, scoutPicks, libraryTable, championProfile, junglerRows } from './career/stats.js';
 import { esc, heroHtml, tilesHtml, formHtml, accountsHtml, opponentsHtml, matchesHtml, careerHtml, damageHtml, gankHtml, earlyHtml, synergyHtml, matchupHtml, impactHtml, eloHtml, kpisHtml, insightsHtml, goldLineHtml, scoutHtml, scoutPickHtml, libraryHtml, championDetailHtml, championEditorHtml } from './career/view.js';
 
 const $ = (s) => document.querySelector(s);
@@ -26,8 +26,8 @@ const state = {
   opinions: [],
   tab: 'oversikt',
   scout: { side: 'against', q: '', color: '', sort: 'games', limit: 40 },
-  library: { side: 'against', q: '', color: '', sort: 'games', limit: 24 },
-  detail: null, // { championId, side, limit } när detaljvyn är öppen
+  library: { side: 'against', q: '', color: '', sort: 'games', limit: 24, role: 'all' },
+  detail: null, // { championId, side, limit, role } när detaljvyn är öppen
   picks: { allies: [null, null, null, null], enemies: [null, null, null, null, null] },
   champs: { name: (id) => `#${id}`, icon: () => null, tags: () => [], all: () => [] },
   filters: { champion: 'nunu', queue: 'rift', account: '' },
@@ -170,30 +170,39 @@ function renderScout(rows) {
  * Champion Library: alla köer på Rift med champion- och kontofiltren ovan (alla konton som standard).
  * Kö-filtret används inte här – Solo/Duo, Flex och Normal visas alltid var för sig.
  */
-function libraryRows() {
+function libraryRows(role = 'all', side = 'against') {
   const f = state.filters;
-  return filterMatches(state.matches, { champion: f.champion === 'nunu' ? NUNU : null, queues: QUEUE_FILTERS.rift.queues, puuid: f.account || null });
+  const rows = filterMatches(state.matches, { champion: f.champion === 'nunu' ? NUNU : null, queues: QUEUE_FILTERS.rift.queues, puuid: f.account || null });
+  // Jungler-filtret: bara motståndarens jungler (lagkamraternas positioner sparas inte)
+  return role === 'jungle' && side === 'against' ? junglerRows(rows) : rows;
 }
 
 function renderLibrary() {
   const lib = state.library;
-  const rows = libraryRows();
-  $('[data-library]').innerHTML = libraryHtml(libraryTable(rows, state.opinions, lib.side), state.champs, lib);
+  const rows = libraryRows(lib.role, lib.side);
+  const role = lib.side === 'against' ? lib.role : 'all';
+  $('[data-library]').innerHTML = libraryHtml(libraryTable(rows, state.opinions, lib.side), state.champs, { ...lib, role });
   $$('[data-lib-tab-side]').forEach((b) => b.classList.toggle('is-active', b.dataset.libTabSide === lib.side));
+  $$('[data-lib-role]').forEach((b) => {
+    b.classList.toggle('is-active', b.dataset.libRole === role);
+    b.disabled = lib.side === 'with';
+    b.title = lib.side === 'with' ? 'Lagkamraternas positioner sparas inte – filtret gäller motståndare' : '';
+  });
+  $('[data-lib-roles]').classList.toggle('is-disabled', lib.side === 'with');
   $('[data-lib-sort]').value = lib.sort;
-  if (state.detail) renderDetail(rows, false);
+  if (state.detail) renderDetail(undefined, false);
 }
 
 /** Detaljvyn. Anteckningsfälten ritas bara om när champion eller relation byts, så inget du skriver försvinner. */
-function renderDetail(rows = libraryRows(), editor = true) {
+function renderDetail(rows, editor = true) {
   const d = state.detail;
-  const p = championProfile(rows, d.championId, d.side, state.opinions);
-  $('[data-lib-detail]').innerHTML = championDetailHtml(p, state.champs, state.accounts, { limit: d.limit });
+  const p = championProfile(rows || libraryRows(d.role, d.side), d.championId, d.side, state.opinions);
+  $('[data-lib-detail]').innerHTML = championDetailHtml(p, state.champs, state.accounts, { limit: d.limit, role: d.side === 'against' ? d.role : 'all' });
   if (editor) $('[data-lib-editor]').innerHTML = championEditorHtml(p, state.champs);
 }
 
-function openDetail(championId, side) {
-  state.detail = { championId, side, limit: 10 };
+function openDetail(championId, side, role = 'all') {
+  state.detail = { championId, side, limit: 10, role };
   renderDetail();
   const dlg = $('[data-lib-dialog]');
   if (!dlg.open) dlg.showModal();
@@ -325,9 +334,10 @@ function bind() {
   });
 
   document.addEventListener('click', async (e) => {
-    const t = e.target.closest('[data-action],[data-champion],[data-queue],[data-unlink],[data-more],[data-tab],[data-opinion],[data-scout-side],[data-scout-color],[data-scout-more],[data-lib-open],[data-lib-close],[data-lib-side],[data-lib-tab-side],[data-lib-color],[data-lib-more],[data-lib-more-games]');
+    const t = e.target.closest('[data-action],[data-champion],[data-queue],[data-unlink],[data-more],[data-tab],[data-opinion],[data-scout-side],[data-scout-color],[data-scout-more],[data-lib-open],[data-lib-close],[data-lib-side],[data-lib-tab-side],[data-lib-color],[data-lib-more],[data-lib-more-games],[data-lib-role]');
     if (!t) return;
-    if (t.dataset.libOpen) return openDetail(Number(t.dataset.libOpen), t.dataset.side);
+    if (t.dataset.libOpen) return openDetail(Number(t.dataset.libOpen), t.dataset.side, t.closest('[data-library]') ? state.library.role : 'all');
+    if (t.dataset.libRole) { Object.assign(state.library, { role: t.dataset.libRole, limit: 24 }); return render(); }
     if (t.hasAttribute('data-lib-close')) return $('[data-lib-dialog]').close();
     if (t.dataset.libSide) { Object.assign(state.detail, { side: t.dataset.libSide, limit: 10 }); return renderDetail(); }
     if (t.dataset.libTabSide) { Object.assign(state.library, { side: t.dataset.libTabSide, limit: 24 }); return render(); }

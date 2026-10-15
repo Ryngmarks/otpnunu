@@ -309,6 +309,9 @@ kommentar. Ramen har samma färgmodell som Live Scout, beräknad på Ranked (Sol
 blandas aldrig in i Ranked men visas i detaljvyn. Alla konton och alla Nunu-matcher på Rift används
 (champion- och kontofiltren gäller, kö-filtret inte).
 
+*Bara junglers* (motståndare): räknar bara matcher där du spelade jungle, mot motståndarens jungler
+(`opponent_champion_id`). Lagkamraternas positioner sparas inte, så filtret gäller inte lagkamrater.
+
 Detaljvyn (klick på ett kort, eller på ett namn i Live Scout): totalt, vinst per kö, KDA, damage,
 early game vid 10 min, matchhistorik och din strategi. Varje värde visar hur många matcher det bygger
 på; saknas data visas –.

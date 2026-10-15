@@ -430,3 +430,23 @@ test('Champion Library: Solo/Duo och Flex för sig, Normal aldrig i Ranked, sakn
   assert.doesNotMatch(dn, /undefined|NaN|null/);
   assert.match(v.championEditorHtml(p, champs), /Tidig scuttle/);
 });
+
+test('Champion Library: jungler-filtret räknar bara motståndarens jungler', async () => {
+  const s = await import('../js/career/stats.js');
+  const r = (win, pos, opp, enemies) => ({ queue_id: 420, win, team_position: pos, opponent_champion_id: opp, allies: [1], enemies });
+  const rows = [
+    r(true, 'JUNGLE', 64, [64, 7, 99]),
+    r(false, 'JUNGLE', 64, [64, 7]),
+    r(true, 'JUNGLE', 121, [121, 64]),   // Lee Sin på annan position räknas inte som jungler här
+    r(true, 'MIDDLE', 7, [7, 64]),       // du spelade inte jungle
+    r(true, 'JUNGLE', null, [5]),        // ingen motståndarjungler
+  ];
+  const j = s.junglerRows(rows);
+  assert.equal(j.length, 3);
+  const t = s.libraryTable(j, [], 'against');
+  assert.deepEqual(t.list.map((e) => e.championId).sort((a, b) => a - b), [64, 121]);
+  assert.deepEqual(t.list.find((e) => e.championId === 64).solo, { championId: 64, games: 2, wins: 1, losses: 1, winrate: 50 });
+  assert.equal(s.championProfile(j, 64, 'against').total.games, 2);
+  // Utan filtret: alla möten
+  assert.equal(s.libraryTable(rows, [], 'against').list.find((e) => e.championId === 64).solo.games, 4);
+});
