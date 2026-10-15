@@ -504,7 +504,7 @@ function scoutRow(e, champs, side, baseline) {
       ${champIcon(champs, e.championId)}
       <div class="scout__main">
         <div class="scout__head">
-          <span class="opponents__name">${esc(champs.name(e.championId))}</span>
+          <button type="button" class="opponents__name scout__open" data-lib-open="${e.championId}" data-side="${side}" title="Öppna i Champion Library">${esc(champs.name(e.championId))}</button>
           <span class="scout__tag"><i class="scout__dot" aria-hidden="true"></i>${esc(scoutLabel(e))}</span>
           ${e.support === 'stabilt' ? '' : `<small class="badge ${e.support === 'osäkert' ? 'badge--unsure' : ''}">${SUPPORT_LABEL[e.support]}</small>`}
         </div>
@@ -553,5 +553,154 @@ export function scoutPickHtml(e, champs, side, baseline) {
       </div>
       ${scoutStats(e, baseline)}
       ${e.note ? `<p class="scout__memo">“${esc(e.note)}”</p>` : ''}
+    </div>`;
+}
+
+/* ---------------- Champion Library ---------------- */
+
+const RELATION = { against: 'Motståndare', with: 'Lagkamrat' };
+
+/** Kort etikett på kortet; hela förklaringen finns i scoutLabel. */
+export function scoutShort(e) {
+  if (e.color === 'green') return 'Grön · stöds';
+  if (e.color === 'red') return 'Röd · stöds';
+  if (e.color === 'orange') return 'Orange · säger emot';
+  if (!e.opinion) return 'Grå · ingen bedömning';
+  return e.signal === 'jämnt' ? 'Grå · neutral' : 'Grå · för lite data';
+}
+
+const pctOf = (t) => (t.winrate == null ? '–' : `${t.winrate}<small>%</small>`);
+const gamesOf = (n) => `${num(n)} ${n === 1 ? 'match' : 'matcher'}`;
+const bar = (t) => `<span class="splitbar" aria-hidden="true">${t.games ? `${t.wins ? `<i class="is-good" style="flex:${t.wins}"></i>` : ''}${t.losses ? `<i class="is-bad" style="flex:${t.losses}"></i>` : ''}` : '<i class="is-none" style="flex:1"></i>'}</span>`;
+/** Bakgrund med champion-bild och ikonen som reserv om bilden inte går att hämta. */
+const art = (...urls) => {
+  const list = urls.filter(Boolean).map((u) => `url(&quot;${esc(u)}&quot;)`);
+  return list.length ? ` style="background-image:${list.join(',')}"` : '';
+};
+
+function libCard(e, champs, side) {
+  const name = champs.name(e.championId);
+  const stat = (label, t) => `
+    <span class="lib-stat">
+      <span class="lib-stat__label">${label}</span>
+      <b class="lib-stat__value">${pctOf(t)}</b>
+      <span class="lib-stat__n">${gamesOf(t.games)}</span>
+      ${bar(t)}
+    </span>`;
+  const mark = e.opinion === 1 ? '<span class="lib-card__mark" title="Din bedömning: bra">👍</span>'
+    : e.opinion === -1 ? '<span class="lib-card__mark" title="Din bedömning: svår">👎</span>' : '';
+  return `
+    <li>
+      <button type="button" class="lib-card scout--${e.color}" data-lib-open="${e.championId}" data-side="${side}"
+        aria-label="${esc(name)}: ${esc(scoutLabel(e))}. Öppna detaljer">
+        <span class="lib-card__art"${art(champs.tile && champs.tile(e.championId), champs.icon(e.championId))}></span>
+        <span class="lib-card__top">
+          <span class="lib-card__tag"><i class="scout__dot" aria-hidden="true"></i>${esc(scoutShort(e))}</span>
+          ${mark}
+        </span>
+        <span class="lib-card__name">${esc(name)}</span>
+        <span class="lib-card__sub">${RELATION[side]} · Ranked ${num(e.ranked.games)} · Normal ${num(e.normal.games)}${e.support === 'osäkert' ? ' · <span class="badge badge--unsure">osäkert</span>' : ''}</span>
+        <span class="lib-card__stats">${stat('Solo/Duo', e.solo)}${stat('Flex', e.flex)}</span>
+        <span class="lib-card__note ${e.note ? '' : 'is-empty'}">${e.note ? `“${esc(e.note)}”` : 'Ingen kommentar än'}</span>
+      </button>
+    </li>`;
+}
+
+const LIB_SORTS = {
+  games: (a, b) => b.ranked.games - a.ranked.games || b.normal.games - a.normal.games,
+  best: (a, b) => (b.ranked.winrate ?? -1) - (a.ranked.winrate ?? -1) || b.ranked.games - a.ranked.games,
+  worst: (a, b) => (a.ranked.winrate ?? 101) - (b.ranked.winrate ?? 101) || b.ranked.games - a.ranked.games,
+};
+
+/** Biblioteket: kort per champion med Solo/Duo och Flex, färg enligt Live Scout-modellen. */
+export function libraryHtml(table, champs, { q = '', color = '', sort = 'games', limit = 24 } = {}) {
+  if (!table.list.length) return '<p class="empty">Inga matcher med lagdata än – synka för att fylla på.</p>';
+  const needle = q.trim().toLowerCase();
+  const counts = { green: 0, red: 0, orange: 0, gray: 0 };
+  table.list.forEach((e) => { counts[e.color] += 1; });
+  let list = table.list.filter((e) => !needle || champs.name(e.championId).toLowerCase().includes(needle));
+  if (color) list = list.filter((e) => e.color === color);
+  list = sort === 'name'
+    ? [...list].sort((a, b) => champs.name(a.championId).localeCompare(champs.name(b.championId)))
+    : [...list].sort(LIB_SORTS[sort] || LIB_SORTS.games);
+  const chip = (k, label) => `<button type="button" data-lib-color="${k}" class="${color === k ? 'is-active' : ''}">${k ? `<i class="scout__dot scout--${k}" aria-hidden="true"></i>` : ''}${label}${k ? ` <small>${counts[k]}</small>` : ''}</button>`;
+  return `
+    <p class="card__hint">${table.games} rankade matcher · ${table.list.length} champions · din Ranked-vinst ${table.baseline ?? '–'} % · färgen jämför din bedömning med Ranked (Solo/Duo + Flex)</p>
+    <div class="chips scout__colors">${chip('', 'Alla')}${chip('green', 'Grön')}${chip('red', 'Röd')}${chip('orange', 'Orange')}${chip('gray', 'Grå')}</div>
+    ${list.length ? `<ul class="lib-grid">${list.slice(0, limit).map((e) => libCard(e, champs, table.side)).join('')}</ul>` : '<p class="empty">Ingen champion matchar.</p>'}
+    ${list.length > limit ? `<button type="button" class="btn btn--ghost btn--block" data-lib-more>Visa fler (${list.length - limit} till)</button>` : ''}`;
+}
+
+/** Detaljvyn: statistik (ritas om vid ändringar). Anteckningarna ligger i championEditorHtml. */
+export function championDetailHtml(p, champs, accounts, { limit = 10 } = {}) {
+  const name = champs.name(p.championId);
+  const tile = (label, value, sub, tone = '') => `<div class="lib-tile ${tone}"><span>${label}</span><b>${value}</b><small>${sub}</small></div>`;
+  const nOf = (n) => (n ? gamesOf(n) : 'ingen data');
+  const toneOf = (v) => (v == null ? '' : v >= 0 ? 'is-pos' : 'is-neg');
+  const queueRow = (label, t) => `
+    <li><span class="lib-q__label">${label}</span>${bar(t)}
+      <span class="lib-q__value"><b>${t.winrate == null ? '–' : `${t.winrate} %`}</b> <small>${t.games ? `${t.wins} V – ${t.losses} F · ` : ''}${gamesOf(t.games)}</small></span></li>`;
+  const e = p.early;
+  const history = matchesHtml(p.games, champs, accounts, limit).replace(/data-more/g, 'data-lib-more-games');
+  return `
+    <header class="lib-hero scout--${p.color}"${art(champs.splash && champs.splash(p.championId), champs.tile && champs.tile(p.championId), champs.icon(p.championId))}>
+      <button type="button" class="lib-hero__close" data-lib-close aria-label="Stäng">✕</button>
+      <div class="lib-hero__body">
+        <p class="eyebrow">Champion Library · ${RELATION[p.side]}</p>
+        <h2 class="lib-hero__name" id="lib-title">${esc(name)}</h2>
+        <span class="scout__tag"><i class="scout__dot" aria-hidden="true"></i>${esc(scoutLabel(p))}</span>
+      </div>
+    </header>
+    <div class="lib-detail">
+      <div class="lib-detail__bar">
+        <div class="seg" role="group" aria-label="Relation">
+          <button type="button" data-lib-side="against" class="${p.side === 'against' ? 'is-active' : ''}">Motståndare</button>
+          <button type="button" data-lib-side="with" class="${p.side === 'with' ? 'is-active' : ''}">Lagkamrat</button>
+        </div>
+        ${opinionBtns(p, p.side)}
+      </div>
+
+      <div class="lib-tiles">
+        ${tile('Matcher', num(p.total.games), 'alla köer på Rift')}
+        ${tile('Vinster', num(p.total.wins), p.total.games ? gamesOf(p.total.games) : 'ingen data')}
+        ${tile('Förluster', num(p.total.losses), p.total.games ? gamesOf(p.total.games) : 'ingen data')}
+        ${tile('Vinst', p.total.winrate == null ? '–' : `${p.total.winrate} %`, gamesOf(p.total.games))}
+      </div>
+
+      <h3 class="sub">Vinst per kö</h3>
+      <ul class="lib-q">${queueRow('Solo/Duo', p.byQueue.solo)}${queueRow('Flex', p.byQueue.flex)}${queueRow('Normal', p.byQueue.normal)}</ul>
+      <p class="card__hint lib-detail__hint">Normal räknas aldrig in i Ranked.${p.support === 'osäkert' ? ' <span class="badge badge--unsure">Osäkert underlag</span>' : ''}</p>
+
+      <h3 class="sub">Prestation</h3>
+      <div class="lib-tiles">
+        ${tile('KDA', dash(p.kda.value), p.kda.n ? `${dash(p.kda.k)} / ${dash(p.kda.d)} / ${dash(p.kda.a)} · ${gamesOf(p.kda.n)}` : 'ingen data')}
+        ${tile('Damage', num(p.damage.avg), p.damage.n ? `${num(p.damage.perMin)}/min · ${gamesOf(p.damage.n)}` : 'ingen data')}
+      </div>
+
+      <h3 class="sub">Early game · 10 min</h3>
+      <div class="lib-tiles">
+        ${tile('Guld mot jungler', signed(e.goldDiff10.value), nOf(e.goldDiff10.n), toneOf(e.goldDiff10.value))}
+        ${tile('XP mot jungler', signed(e.xpDiff10.value), nOf(e.xpDiff10.n), toneOf(e.xpDiff10.value))}
+        ${tile('CS mot jungler', signed(e.csDiff10.value), nOf(e.csDiff10.n), toneOf(e.csDiff10.value))}
+        ${tile('Dödsfall före 10', dash(e.deaths10.value), nOf(e.deaths10.n))}
+        ${tile('Med i first blood', e.firstBlood.value == null ? '–' : `${e.firstBlood.value} %`, nOf(e.firstBlood.n))}
+      </div>
+
+      <h3 class="sub">Matcher ${p.side === 'with' ? 'med' : 'mot'} ${esc(name)}</h3>
+      ${history}
+    </div>`;
+}
+
+/** Egen bedömning: kort kommentar (syns på kortet och i Live Scout) och längre strategi. */
+export function championEditorHtml(p, champs) {
+  const name = esc(champs.name(p.championId));
+  return `
+    <div class="lib-editor">
+      <h3 class="sub">Min strategi</h3>
+      <label class="lib-field"><span>Kommentar <small class="muted">– syns på kortet och i Live Scout</small></span>
+        <input type="text" maxlength="500" value="${esc(p.note)}" placeholder="Kort kommentar om ${name}…" data-note data-champ="${p.championId}" data-side="${p.side}"></label>
+      <label class="lib-field"><span>Strategi och anteckningar</span>
+        <textarea rows="5" maxlength="2000" placeholder="Hur spelar du ${p.side === 'with' ? 'med' : 'mot'} ${name}? Leveling, första clear, när du ska ganka…" data-strategy data-champ="${p.championId}" data-side="${p.side}">${esc(p.strategy)}</textarea></label>
+      <p class="card__hint lib-editor__hint">Sparas automatiskt när du lämnar fältet · separat för ${RELATION[p.side].toLowerCase()}</p>
     </div>`;
 }

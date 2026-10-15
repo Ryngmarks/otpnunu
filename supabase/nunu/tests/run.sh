@@ -46,3 +46,7 @@ $PSQL -d "$DB" -f 007_rank_test.sql 2>&1 | sed -n 's/^psql:[^ ]* \(NOTICE\|ERROR
 PGOPTIONS='-c client_min_messages=warning' $PSQL -d "$DB" -f ../008_scout.sql
 PGOPTIONS='-c client_min_messages=warning' $PSQL -d "$DB" -f ../008_scout.sql
 $PSQL -d "$DB" -f 008_scout_test.sql 2>&1 | sed -n 's/^psql:[^ ]* \(NOTICE\|ERROR\):  //p; /GODKÄNDA/p'
+# Champion Library: två gånger (ska gå att köra om)
+PGOPTIONS='-c client_min_messages=warning' $PSQL -d "$DB" -f ../009_library.sql
+PGOPTIONS='-c client_min_messages=warning' $PSQL -d "$DB" -f ../009_library.sql
+$PSQL -d "$DB" -f 009_library_test.sql 2>&1 | sed -n 's/^psql:[^ ]* \(NOTICE\|ERROR\):  //p; /GODKÄNDA/p'

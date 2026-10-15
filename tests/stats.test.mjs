@@ -356,3 +356,77 @@ test('Live Scout: alla champions räknas, även med 1 match, och färgen följer
   assert.match(v.scoutPickHtml(picks[0], champs, 'against', t.baseline), /Kitar ut mig/);
   assert.equal(s.scoutTable(rows, opinions, 'with').list.find((e) => e.championId === 64).color, 'gray');
 });
+
+test('Champion Library: Solo/Duo och Flex för sig, Normal aldrig i Ranked, saknad data blir null', async () => {
+  const s = await import('../js/career/stats.js');
+  const v = await import('../js/career/view.js');
+  let n = 0;
+  const g = (queue_id, win, extra = {}) => ({
+    match_id: `M${++n}`, game_start: `2026-01-${String(n).padStart(2, '0')}`, puuid: n % 3 ? 'p1' : 'p2',
+    queue_id, win, champion_id: 20, allies: [412], enemies: [64], kills: 4, deaths: 2, assists: 6, cs: 150, duration_s: 1800, damage: 18000, ...extra,
+  });
+  const early = (gold, oppGold, d) => ({ me: { 10: { gold, xp: 4000, cs: 50, d } }, opp: { 10: { gold: oppGold, xp: 4200, cs: 55 } }, firstBlood: 'kill' });
+  const rows = [
+    g(420, true, { early: early(4000, 3500, 0) }), g(420, true), g(420, false),
+    g(440, false, { early: early(3000, 3600, 2) }),
+    g(400, true, { enemies: [64, 7] }), g(400, true, { enemies: [7] }),
+  ];
+  const opinions = [
+    { champion_id: 64, side: 'against', opinion: -1, note: 'Ward raptors', strategy: 'Tidig scuttle' },
+    { champion_id: 64, side: 'with', opinion: 1, note: 'Bra ihop', strategy: '' },
+  ];
+  const t = s.libraryTable(rows, opinions, 'against');
+  const lee = t.list.find((e) => e.championId === 64);
+  assert.deepEqual(lee.solo, { championId: 64, games: 3, wins: 2, losses: 1, winrate: 67 });
+  assert.deepEqual(lee.flex, { championId: 64, games: 1, wins: 0, losses: 1, winrate: 0 });
+  assert.equal(lee.normal.games, 1);
+  assert.equal(lee.ranked.games, 4);            // Normal räknas inte in
+  assert.equal(lee.strategy, 'Tidig scuttle');
+  const onlyNormal = t.list.find((e) => e.championId === 7);
+  assert.equal(onlyNormal.ranked.games, 0);     // bara mött i Normal: med, men inga rankade siffror
+  assert.equal(onlyNormal.solo.winrate, null);
+  assert.equal(onlyNormal.normal.games, 2);
+  // Samma champion, annan relation: egen bedömning
+  const asAlly = s.libraryTable(rows, opinions, 'with').list.find((e) => e.championId === 64);
+  assert.equal(asAlly.opinion, 1);              // bedömning utan matcher visas ändå, med 0 matcher
+  assert.equal(asAlly.ranked.games, 0);
+  assert.equal(asAlly.note, 'Bra ihop');
+  assert.equal(s.libraryTable(rows, opinions, 'with').list.find((e) => e.championId === 412).opinion, null);
+  assert.equal(s.libraryTable(rows, opinions, 'against').list.find((e) => e.championId === 64).opinion, -1);
+
+  const p = s.championProfile(rows, 64, 'against', opinions);
+  assert.deepEqual(p.total, { games: 5, wins: 3, losses: 2, winrate: 60 });
+  assert.equal(p.byQueue.solo.games, 3);
+  assert.equal(p.byQueue.flex.games, 1);
+  assert.equal(p.byQueue.normal.games, 1);
+  assert.equal(p.kda.value, 5);
+  assert.equal(p.damage.avg, 18000);
+  assert.equal(p.damage.perMin, 600);
+  assert.deepEqual(p.early.goldDiff10, { value: -50, n: 2 });
+  assert.deepEqual(p.early.deaths10, { value: 1, n: 2 });
+  assert.equal(p.games[0].match_id, 'M5');      // nyast först
+  assert.equal(p.note, 'Ward raptors');
+
+  const none = s.championProfile(rows, 999, 'against', []);
+  assert.equal(none.total.games, 0);
+  assert.equal(none.kda.value, null);
+  assert.equal(none.early.goldDiff10.value, null);
+  assert.equal(none.color, 'gray');
+
+  const champs = { name: (id) => `C${id}`, icon: () => null, tile: (id) => `https://x/${id}.jpg`, splash: () => null };
+  const html = v.libraryHtml(t, champs);
+  assert.match(html, /Solo\/Duo/);
+  assert.match(html, /Flex/);
+  assert.match(html, /1 match</);               // även en enda match visas med antal
+  assert.match(html, /“Ward raptors”/);
+  assert.match(html, /x\/64\.jpg/);
+  assert.doesNotMatch(html, /undefined|NaN|null/);
+  const d = v.championDetailHtml(p, champs, [], {});
+  assert.match(d, /Normal räknas aldrig in i Ranked/);
+  assert.match(d, /−50/);
+  assert.doesNotMatch(d, /undefined|NaN|null/);
+  const dn = v.championDetailHtml(none, champs, [], {});
+  assert.match(dn, /ingen data/);
+  assert.doesNotMatch(dn, /undefined|NaN|null/);
+  assert.match(v.championEditorHtml(p, champs), /Tidig scuttle/);
+});

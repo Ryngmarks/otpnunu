@@ -455,6 +455,95 @@ export function scoutPicks(table, ids) {
   });
 }
 
+/* ---------------- Champion Library (samma motor som Live Scout) ---------------- */
+
+/** Kögrupper som aldrig blandas: Ranked-statistiken är bara Solo/Duo och Flex. */
+export const QUEUE_GROUPS = {
+  solo: QUEUE_FILTERS.solo.queues,
+  flex: QUEUE_FILTERS.flex.queues,
+  normal: QUEUE_FILTERS.normal.queues,
+};
+const RANKED = QUEUE_FILTERS.ranked.queues;
+const tallyOf = (list) => {
+  const w = winrateOf(list);
+  return { games: w.games, wins: w.wins, losses: w.games - w.wins, winrate: w.winrate };
+};
+
+/** Matcherna där championen var lagkamrat (side 'with') eller motståndare ('against'), nyast först. */
+export function championGames(rows, championId, side) {
+  const key = SCOUT_SIDES[side];
+  return rows
+    .filter((r) => Array.isArray(r[key]) && r[key].includes(championId))
+    .sort((a, b) => String(b.game_start).localeCompare(String(a.game_start)));
+}
+
+/**
+ * Biblioteket: ett kort per champion med Solo/Duo och Flex för sig. Färg och underlag kommer från
+ * scoutTable på Ranked-matcherna (Solo/Duo + Flex), så korten och Live Scout använder samma modell.
+ * Champions du bara mött i Normal eller bara har en bedömning om finns också med (Ranked: 0 matcher).
+ */
+export function libraryTable(rows, opinions = [], side = 'against') {
+  const key = SCOUT_SIDES[side];
+  const ranked = scoutTable(rows.filter((r) => RANKED.includes(r.queue_id)), opinions, side);
+  const per = Object.fromEntries(Object.entries(QUEUE_GROUPS).map(([g, queues]) =>
+    [g, new Map(championTally(rows.filter((r) => queues.includes(r.queue_id)), key).map((t) => [t.championId, t]))]));
+  const byId = new Map(ranked.list.map((e) => [e.championId, e]));
+  const own = new Map(opinions.filter((o) => o.side === side).map((o) => [o.champion_id, o]));
+  for (const id of per.normal.keys()) {
+    if (!byId.has(id)) byId.set(id, scoutPicks(ranked, [id])[0]);
+  }
+  const empty = { games: 0, wins: 0, losses: 0, winrate: null };
+  const list = [...byId.values()].map((e) => ({
+    ...e,
+    strategy: (own.get(e.championId) || {}).strategy || '',
+    ranked: { games: e.games, wins: e.wins, losses: e.losses, winrate: e.winrate },
+    solo: per.solo.get(e.championId) || empty,
+    flex: per.flex.get(e.championId) || empty,
+    normal: per.normal.get(e.championId) || empty,
+  })).sort((a, b) => b.ranked.games - a.ranked.games || b.normal.games - a.normal.games);
+  return { side, games: ranked.games, baseline: ranked.baseline, list };
+}
+
+/**
+ * Detaljvyn för en champion: allt räknas på matcherna med/mot den. Saknas data blir värdet null
+ * (visas som –) och varje värde har sitt eget antal matcher (n).
+ */
+export function championProfile(rows, championId, side, opinions = []) {
+  const games = championGames(rows, championId, side);
+  const entry = libraryTable(rows, opinions, side).list.find((e) => e.championId === championId)
+    || { ...scoutPicks({ list: [] }, [championId])[0], strategy: '', ranked: tallyOf([]), solo: tallyOf([]), flex: tallyOf([]), normal: tallyOf([]) };
+  const s = summarize(games);
+  const withDamage = games.filter((r) => r.damage != null && r.duration_s);
+  const avg = (list, f) => (list.length ? round(mean(list.map(f)), 0) : null);
+  const early = (minute, k) => {
+    const xs = games.map((r) => diffAt(r, minute, k)).filter((x) => x != null);
+    return { value: xs.length ? round(mean(xs), 0) : null, n: xs.length };
+  };
+  const d10 = games.filter((r) => r.early?.me?.[10]);
+  const fb = games.filter((r) => r.early && r.early.firstBlood !== undefined);
+  return {
+    ...entry,
+    championId,
+    side,
+    total: tallyOf(games),
+    byQueue: Object.fromEntries(Object.entries(QUEUE_GROUPS).map(([g, queues]) => [g, tallyOf(games.filter((r) => queues.includes(r.queue_id)))])),
+    kda: { value: s.kda, k: s.kills, d: s.deaths, a: s.assists, n: s.games },
+    damage: {
+      avg: avg(withDamage, (r) => Number(r.damage)),
+      perMin: avg(withDamage, (r) => Number(r.damage) / (r.duration_s / 60)),
+      n: withDamage.length,
+    },
+    early: {
+      goldDiff10: early(10, 'gold'),
+      xpDiff10: early(10, 'xp'),
+      csDiff10: early(10, 'cs'),
+      deaths10: { value: d10.length ? round(mean(d10.map((r) => r.early.me[10].d)), 1) : null, n: d10.length },
+      firstBlood: { value: fb.length ? pct(fb.filter((r) => r.early.firstBlood === 'kill' || r.early.firstBlood === 'assist').length, fb.length) : null, n: fb.length },
+    },
+    games,
+  };
+}
+
 /** Grovt: motståndarlaget räknas som "tung" i en typ om minst två champions har den som första tagg. */
 export const COMP_TYPES = { Tank: 'Tanks', Assassin: 'Assassins', Mage: 'Mages', Fighter: 'Fighters', Marksman: 'Marksmen' };
 

@@ -78,6 +78,7 @@
     <nav class="tabs" aria-label="Avsnitt" data-tabs>
       <button type="button" data-tab="oversikt">Översikt</button>
       <button type="button" data-tab="scout">Scout</button>
+      <button type="button" data-tab="bibliotek">Bibliotek</button>
       <button type="button" data-tab="early">Early game</button>
       <button type="button" data-tab="ganks">Ganks</button>
       <button type="button" data-tab="matchups">Matchups</button>
@@ -186,6 +187,28 @@
       </section>
     </div>
 
+    <!-- ============ CHAMPION LIBRARY ============ -->
+    <div class="panel" data-panel="bibliotek" hidden>
+      <section class="card lib">
+        <h2 class="card__title">Champion Library</h2>
+        <p class="card__hint">Alla dina matcher från alla kopplade konton · Solo/Duo och Flex för sig (kö-filtret ovan gäller inte här) · tryck på ett kort för detaljer</p>
+        <div class="scout__controls">
+          <div class="seg">
+            <button type="button" data-lib-tab-side="against">Motståndare</button>
+            <button type="button" data-lib-tab-side="with">Lagkamrater</button>
+          </div>
+          <input class="select scout__search" type="search" placeholder="Sök champion" data-lib-search aria-label="Sök champion">
+          <select class="select" data-lib-sort aria-label="Sortera">
+            <option value="games">Flest rankade matcher</option>
+            <option value="best">Högst Ranked-vinst</option>
+            <option value="worst">Lägst Ranked-vinst</option>
+            <option value="name">Namn</option>
+          </select>
+        </div>
+        <div data-library></div>
+      </section>
+    </div>
+
     <!-- ============ EARLY GAME ============ -->
     <div class="panel" data-panel="early" hidden>
     <section class="card" data-early-card hidden>
@@ -263,6 +286,11 @@
         associated properties are trademarks or registered trademarks of Riot Games, Inc.</p>
     </footer>
   </main>
+
+  <dialog class="lib-dialog" data-lib-dialog aria-labelledby="lib-title">
+    <div data-lib-detail></div>
+    <div data-lib-editor></div>
+  </dialog>
 
   <div class="toast" data-toast role="status" aria-live="polite"></div>
 

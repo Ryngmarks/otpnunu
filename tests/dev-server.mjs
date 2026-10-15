@@ -302,8 +302,8 @@ export function createDevServer({ port = 8787, riot = createFakeRiot(), store = 
       const data = Object.fromEntries(Object.entries(CHAMPS).map(([key, id]) => [id, { key, name: id === 'Nunu' ? 'Nunu & Willump' : id.replace(/([a-z])([A-Z])/g, '$1 $2'), image: { full: `${id}.png` }, tags: [TAGS[key]] }]));
       return send(res, 200, { data });
     }
-    if (p.startsWith('/ddragon/cdn/') && p.endsWith('.png')) {
-      const name = p.split('/').pop().replace('.png', '');
+    if (p.startsWith('/ddragon/cdn/') && /\.(png|jpg)$/.test(p)) {
+      const name = p.split('/').pop().replace(/(_0)?\.(png|jpg)$/, '');
       const hue = [...name].reduce((s, c) => s + c.charCodeAt(0), 0) % 360;
       return send(res, 200, `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" fill="hsl(${hue},45%,35%)"/><text x="20" y="25" font-size="13" font-family="sans-serif" fill="#fff" text-anchor="middle">${name.slice(0, 3)}</text></svg>`, { 'content-type': 'image/svg+xml' });
     }

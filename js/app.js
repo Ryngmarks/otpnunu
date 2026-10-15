@@ -3,8 +3,8 @@
  */
 import { createApi, ApiError } from './core/api.js';
 import { loadChampions } from './core/ddragon.js';
-import { NUNU, QUEUE_FILTERS, filterMatches, summarize, recentForm, byAccount, opponents, masterySummary, careerSummary, damageReport, gankReport, earlyReport, synergyReport, matchupReport, impactReport, eloSeries, overviewKpis, insights, scoutTable, scoutPicks } from './career/stats.js';
-import { esc, heroHtml, tilesHtml, formHtml, accountsHtml, opponentsHtml, matchesHtml, careerHtml, damageHtml, gankHtml, earlyHtml, synergyHtml, matchupHtml, impactHtml, eloHtml, kpisHtml, insightsHtml, goldLineHtml, scoutHtml, scoutPickHtml } from './career/view.js';
+import { NUNU, QUEUE_FILTERS, filterMatches, summarize, recentForm, byAccount, opponents, masterySummary, careerSummary, damageReport, gankReport, earlyReport, synergyReport, matchupReport, impactReport, eloSeries, overviewKpis, insights, scoutTable, scoutPicks, libraryTable, championProfile } from './career/stats.js';
+import { esc, heroHtml, tilesHtml, formHtml, accountsHtml, opponentsHtml, matchesHtml, careerHtml, damageHtml, gankHtml, earlyHtml, synergyHtml, matchupHtml, impactHtml, eloHtml, kpisHtml, insightsHtml, goldLineHtml, scoutHtml, scoutPickHtml, libraryHtml, championDetailHtml, championEditorHtml } from './career/view.js';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -12,7 +12,7 @@ const cfg = window.APP_CONFIG || {};
 const FILTER_KEY = 'nunu-filters';
 const TAB_KEY = 'nunu-tab';
 const PICKS_KEY = 'nunu-scout-picks';
-const TABS = ['oversikt', 'scout', 'early', 'ganks', 'matchups', 'matcher', 'karriar'];
+const TABS = ['oversikt', 'scout', 'bibliotek', 'early', 'ganks', 'matchups', 'matcher', 'karriar'];
 const PAGE = 20;
 
 const state = {
@@ -26,6 +26,8 @@ const state = {
   opinions: [],
   tab: 'oversikt',
   scout: { side: 'against', q: '', color: '', sort: 'games', limit: 40 },
+  library: { side: 'against', q: '', color: '', sort: 'games', limit: 24 },
+  detail: null, // { championId, side, limit } när detaljvyn är öppen
   picks: { allies: [null, null, null, null], enemies: [null, null, null, null, null] },
   champs: { name: (id) => `#${id}`, icon: () => null, tags: () => [], all: () => [] },
   filters: { champion: 'nunu', queue: 'rift', account: '' },
@@ -132,6 +134,7 @@ function render() {
   $('[data-damage-card]').hidden = !damage;
 
   renderScout(rows);
+  renderLibrary();
 
   // Filterkontroller
   $$('[data-champion]').forEach((b) => b.classList.toggle('is-active', b.dataset.champion === f.champion));
@@ -163,6 +166,40 @@ function renderScout(rows) {
   }
 }
 
+/**
+ * Champion Library: alla köer på Rift med champion- och kontofiltren ovan (alla konton som standard).
+ * Kö-filtret används inte här – Solo/Duo, Flex och Normal visas alltid var för sig.
+ */
+function libraryRows() {
+  const f = state.filters;
+  return filterMatches(state.matches, { champion: f.champion === 'nunu' ? NUNU : null, queues: QUEUE_FILTERS.rift.queues, puuid: f.account || null });
+}
+
+function renderLibrary() {
+  const lib = state.library;
+  const rows = libraryRows();
+  $('[data-library]').innerHTML = libraryHtml(libraryTable(rows, state.opinions, lib.side), state.champs, lib);
+  $$('[data-lib-tab-side]').forEach((b) => b.classList.toggle('is-active', b.dataset.libTabSide === lib.side));
+  $('[data-lib-sort]').value = lib.sort;
+  if (state.detail) renderDetail(rows, false);
+}
+
+/** Detaljvyn. Anteckningsfälten ritas bara om när champion eller relation byts, så inget du skriver försvinner. */
+function renderDetail(rows = libraryRows(), editor = true) {
+  const d = state.detail;
+  const p = championProfile(rows, d.championId, d.side, state.opinions);
+  $('[data-lib-detail]').innerHTML = championDetailHtml(p, state.champs, state.accounts, { limit: d.limit });
+  if (editor) $('[data-lib-editor]').innerHTML = championEditorHtml(p, state.champs);
+}
+
+function openDetail(championId, side) {
+  state.detail = { championId, side, limit: 10 };
+  renderDetail();
+  const dlg = $('[data-lib-dialog]');
+  if (!dlg.open) dlg.showModal();
+  dlg.scrollTop = 0;
+}
+
 /** Champion från fritext: exakt namn först, annars första som börjar likadant. */
 function findChampion(text) {
   const q = text.trim().toLowerCase();
@@ -182,16 +219,23 @@ async function setOpinion(championId, side, patch) {
   const before = state.opinions;
   const cur = before.find((o) => o.champion_id === championId && o.side === side) || { champion_id: championId, side, opinion: null, note: '' };
   const next = { ...cur, ...patch };
-  const empty = next.opinion == null && !next.note;
+  const empty = next.opinion == null && !next.note && !next.strategy;
   state.opinions = before.filter((o) => o !== cur).concat(empty ? [] : [next]);
   render();
   try {
     if (empty) await api.deleteOpinion(championId, side);
-    else await api.saveOpinion({ profile_id: state.profile.id, champion_id: championId, side, opinion: next.opinion, note: next.note });
+    else {
+      // strategy skickas bara när kolumnen finns (009_library.sql) eller när du skrivit en strategi
+      const row = { profile_id: state.profile.id, champion_id: championId, side, opinion: next.opinion, note: next.note || '' };
+      if ('strategy' in next) row.strategy = next.strategy || '';
+      await api.saveOpinion(row);
+    }
   } catch (err) {
     state.opinions = before;
     render();
-    fail(err.status === 404 || /champion_opinion/.test(err.message) ? new ApiError(0, 'Kör 008_scout.sql i Supabase för att kunna spara bedömningar') : err);
+    const missing = err.status === 404 || /champion_opinion/.test(err.message);
+    fail(missing ? new ApiError(0, 'Kör 008_scout.sql i Supabase för att kunna spara bedömningar')
+      : /strategy/.test(err.message) ? new ApiError(0, 'Kör 009_library.sql i Supabase för att kunna spara strategi') : err);
   }
 }
 
@@ -281,8 +325,15 @@ function bind() {
   });
 
   document.addEventListener('click', async (e) => {
-    const t = e.target.closest('[data-action],[data-champion],[data-queue],[data-unlink],[data-more],[data-tab],[data-opinion],[data-scout-side],[data-scout-color],[data-scout-more]');
+    const t = e.target.closest('[data-action],[data-champion],[data-queue],[data-unlink],[data-more],[data-tab],[data-opinion],[data-scout-side],[data-scout-color],[data-scout-more],[data-lib-open],[data-lib-close],[data-lib-side],[data-lib-tab-side],[data-lib-color],[data-lib-more],[data-lib-more-games]');
     if (!t) return;
+    if (t.dataset.libOpen) return openDetail(Number(t.dataset.libOpen), t.dataset.side);
+    if (t.hasAttribute('data-lib-close')) return $('[data-lib-dialog]').close();
+    if (t.dataset.libSide) { Object.assign(state.detail, { side: t.dataset.libSide, limit: 10 }); return renderDetail(); }
+    if (t.dataset.libTabSide) { Object.assign(state.library, { side: t.dataset.libTabSide, limit: 24 }); return render(); }
+    if (t.dataset.libColor !== undefined) { Object.assign(state.library, { color: t.dataset.libColor, limit: 24 }); return render(); }
+    if (t.hasAttribute('data-lib-more')) { state.library.limit += 24; return render(); }
+    if (t.hasAttribute('data-lib-more-games')) { state.detail.limit += 10; return renderDetail(undefined, false); }
     if (t.dataset.opinion) {
       const id = Number(t.dataset.champ);
       const value = Number(t.dataset.opinion);
@@ -321,6 +372,13 @@ function bind() {
 
   $('[data-filter-account]').addEventListener('change', (e) => { state.filters.account = e.target.value; saveFilters(); });
 
+  // Champion Library
+  $('[data-lib-search]').addEventListener('input', (e) => { Object.assign(state.library, { q: e.target.value, limit: 24 }); render(); });
+  $('[data-lib-sort]').addEventListener('change', (e) => { state.library.sort = e.target.value; render(); });
+  const dlg = $('[data-lib-dialog]');
+  dlg.addEventListener('close', () => { state.detail = null; });
+  dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); }); // klick utanför
+
   // Live Scout
   $('[data-scout-search]').addEventListener('input', (e) => { Object.assign(state.scout, { q: e.target.value, limit: 40 }); render(); });
   $('[data-scout-sort]').addEventListener('change', (e) => { state.scout.sort = e.target.value; render(); });
@@ -330,6 +388,11 @@ function bind() {
       const id = Number(el.dataset.champ);
       const cur = state.opinions.find((o) => o.champion_id === id && o.side === el.dataset.side);
       if ((cur ? cur.note || '' : '') !== el.value.trim()) setOpinion(id, el.dataset.side, { note: el.value.trim() });
+    }
+    if (el.matches('[data-strategy]')) {
+      const id = Number(el.dataset.champ);
+      const cur = state.opinions.find((o) => o.champion_id === id && o.side === el.dataset.side);
+      if ((cur ? cur.strategy || '' : '') !== el.value.trim()) setOpinion(id, el.dataset.side, { strategy: el.value.trim() });
     }
     if (el.matches('[data-pick]')) {
       const [team, i] = el.dataset.pick.split(':');

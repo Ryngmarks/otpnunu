@@ -140,7 +140,8 @@ export function createApi({ url, key, storage = window.localStorage, fetchImpl =
     seasonHistory: () => rest('season_history?select=season,champion_id,games,wins,kills,deaths,assists,ended'),
     ranks: () => all('rank_snapshot?select=puuid,queue,tier,division,lp,wins,losses,taken_at&order=taken_at'),
     /* Live Scout: egna bedömningar per champion (008_scout.sql) */
-    opinions: () => rest('champion_opinion?select=champion_id,side,opinion,note'),
+    // select=* fungerar både före och efter 009_library.sql (kolumnen strategy)
+    opinions: () => rest('champion_opinion?select=*'),
     saveOpinion: (row) => rest('champion_opinion?on_conflict=profile_id,champion_id,side', {
       method: 'POST', body: row, prefer: 'resolution=merge-duplicates,return=minimal',
     }),

@@ -231,6 +231,7 @@ Dev-servern kör den riktiga webbsidan och den riktiga Edge Function-koden mot e
 - [ ] Kör `supabase/nunu/006_early.sql` (early game, synergier, matchups).
 - [ ] Kör `supabase/nunu/007_rank.sql` (rank-historik / elo).
 - [ ] Kör `supabase/nunu/008_scout.sql` (Live Scout: egna bedömningar).
+- [ ] Kör `supabase/nunu/009_library.sql` (Champion Library: strategi per champion).
 - [ ] Skapa en Supabase access token (*Account → Access Tokens*) och lägg in den som GitHub-secret
       `SUPABASE_ACCESS_TOKEN` – eller välj manuell driftsättning.
 - [ ] Ansök om en **Personal API Key** hos Riot (*Register Product*). Utvecklingsnyckeln gäller bara
@@ -299,3 +300,20 @@ räknas som en tydlig signal, och bara från 5 matcher:
 - **Grå** – ingen bedömning, för lite underlag eller neutral statistik
 
 Champ select: skriv in ditt lag och motståndarna; valen sparas i webbläsaren tills du rensar.
+
+## Champion Library
+
+Fliken *Bibliotek*: ett kort per champion du spelat med eller mot (växla Motståndare/Lagkamrater),
+med championbild, Solo/Duo- och Flex-vinst för sig (procent + antal matcher), din bedömning och
+kommentar. Ramen har samma färgmodell som Live Scout, beräknad på Ranked (Solo/Duo + Flex) – Normal
+blandas aldrig in i Ranked men visas i detaljvyn. Alla konton och alla Nunu-matcher på Rift används
+(champion- och kontofiltren gäller, kö-filtret inte).
+
+Detaljvyn (klick på ett kort, eller på ett namn i Live Scout): totalt, vinst per kö, KDA, damage,
+early game vid 10 min, matchhistorik och din strategi. Varje värde visar hur många matcher det bygger
+på; saknas data visas –.
+
+Gemensam motor i `js/career/stats.js`, används av Live Scout, Champion Library och kommande Playbook:
+`championTally` → `scoutTable` (färg/underlag) → `libraryTable` (Solo/Duo, Flex, Normal per champion)
+och `championProfile` (detaljer för en champion och relation). Egna bedömningar ligger i
+`nunu.champion_opinion` (en rad per champion och relation: opinion, note, strategy).
