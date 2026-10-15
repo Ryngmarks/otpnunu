@@ -3,7 +3,7 @@
  */
 import { createApi, ApiError } from './core/api.js';
 import { loadChampions } from './core/ddragon.js';
-import { NUNU, QUEUE_FILTERS, filterMatches, summarize, recentForm, byAccount, opponents, masterySummary, careerSummary, damageReport, gankReport, earlyReport, synergyReport, matchupReport, impactReport, eloSeries, overviewKpis, insights, trendSeries, scoutTable, scoutPicks, libraryTable, championProfile, junglerRows } from './career/stats.js';
+import { NUNU, QUEUE_FILTERS, filterMatches, summarize, recentForm, byAccount, opponents, masterySummary, careerSummary, damageReport, gankReport, earlyReport, synergyReport, matchupReport, impactReport, eloSeries, overviewKpis, insights, trendSeries, scoutTable, scoutPicks, libraryTable, championProfile, positionRows, hasPositions } from './career/stats.js';
 import { mountMotion } from './career/motion.js';
 import { esc, heroHtml, tilesHtml, formHtml, accountsHtml, opponentsHtml, matchesHtml, careerHtml, damageHtml, gankHtml, earlyHtml, synergyHtml, matchupHtml, impactHtml, eloHtml, kpisHtml, insightsHtml, goldLineHtml, scoutHtml, scoutPickHtml, libraryHtml, championDetailHtml, championEditorHtml } from './career/view.js';
 
@@ -176,22 +176,25 @@ function renderScout(rows) {
 function libraryRows(role = 'all', side = 'against') {
   const f = state.filters;
   const rows = filterMatches(state.matches, { champion: f.champion === 'nunu' ? NUNU : null, queues: QUEUE_FILTERS.rift.queues, puuid: f.account || null });
-  // Jungler-filtret: bara motståndarens jungler (lagkamraternas positioner sparas inte)
-  return role === 'jungle' && side === 'against' ? junglerRows(rows) : rows;
+  // Rollfiltret: bara champions på den positionen (som lagkamrat eller motståndare)
+  return role === 'all' ? rows : positionRows(rows, side, role);
 }
 
 function renderLibrary() {
   const lib = state.library;
-  const rows = libraryRows(lib.role, lib.side);
-  const role = lib.side === 'against' ? lib.role : 'all';
+  // Utan positioner (före 010_review.sql) finns bara motståndarens jungler
+  const positioned = hasPositions(state.matches);
+  const allowed = (r) => r === 'all' || positioned || (r === 'JUNGLE' && lib.side === 'against');
+  if (!allowed(lib.role)) lib.role = 'all';
+  const role = lib.role;
+  const rows = libraryRows(role, lib.side);
   $('[data-library]').innerHTML = libraryHtml(libraryTable(rows, state.opinions, lib.side), state.champs, { ...lib, role });
   $$('[data-lib-tab-side]').forEach((b) => b.classList.toggle('is-active', b.dataset.libTabSide === lib.side));
   $$('[data-lib-role]').forEach((b) => {
     b.classList.toggle('is-active', b.dataset.libRole === role);
-    b.disabled = lib.side === 'with';
-    b.title = lib.side === 'with' ? 'Lagkamraternas positioner sparas inte – filtret gäller motståndare' : '';
+    b.disabled = !allowed(b.dataset.libRole);
+    b.title = b.disabled ? 'Positionerna fylls i när synken räknat om matcherna (010_review.sql)' : '';
   });
-  $('[data-lib-roles]').classList.toggle('is-disabled', lib.side === 'with');
   $('[data-lib-sort]').value = lib.sort;
   if (state.detail) renderDetail(undefined, false);
 }
@@ -200,7 +203,7 @@ function renderLibrary() {
 function renderDetail(rows, editor = true) {
   const d = state.detail;
   const p = championProfile(rows || libraryRows(d.role, d.side), d.championId, d.side, state.opinions);
-  $('[data-lib-detail]').innerHTML = championDetailHtml(p, state.champs, state.accounts, { limit: d.limit, role: d.side === 'against' ? d.role : 'all' });
+  $('[data-lib-detail]').innerHTML = championDetailHtml(p, state.champs, state.accounts, { limit: d.limit, role: d.role });
   if (editor) $('[data-lib-editor]').innerHTML = championEditorHtml(p, state.champs);
 }
 

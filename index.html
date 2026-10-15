@@ -201,9 +201,13 @@
             <button type="button" data-lib-tab-side="against">Motståndare</button>
             <button type="button" data-lib-tab-side="with">Lagkamrater</button>
           </div>
-          <div class="seg" data-lib-roles>
+          <div class="chips lib-roles" data-lib-roles role="group" aria-label="Position">
             <button type="button" data-lib-role="all">Alla roller</button>
-            <button type="button" data-lib-role="jungle">Bara junglers</button>
+            <button type="button" data-lib-role="TOP"><svg class="role" viewBox="0 0 14 14" aria-hidden="true"><rect x="1" y="1" width="12" height="12" rx="2" class="role__map"/><path d="M3.5 10.5V3.5h7"/></svg>Top</button>
+            <button type="button" data-lib-role="JUNGLE"><svg class="role" viewBox="0 0 14 14" aria-hidden="true"><rect x="1" y="1" width="12" height="12" rx="2" class="role__map"/><circle cx="7" cy="7" r="2.6" class="role__fill"/></svg>Jungle</button>
+            <button type="button" data-lib-role="MIDDLE"><svg class="role" viewBox="0 0 14 14" aria-hidden="true"><rect x="1" y="1" width="12" height="12" rx="2" class="role__map"/><path d="M3.5 10.5l7-7"/></svg>Mid</button>
+            <button type="button" data-lib-role="BOTTOM"><svg class="role" viewBox="0 0 14 14" aria-hidden="true"><rect x="1" y="1" width="12" height="12" rx="2" class="role__map"/><path d="M3.5 10.5h7v-7"/></svg>Bot</button>
+            <button type="button" data-lib-role="UTILITY"><svg class="role" viewBox="0 0 14 14" aria-hidden="true"><rect x="1" y="1" width="12" height="12" rx="2" class="role__map"/><path d="M7 3.8v6.4M3.8 7h6.4"/></svg>Support</button>
           </div>
           <input class="select scout__search" type="search" placeholder="Sök champion" data-lib-search aria-label="Sök champion">
           <select class="select" data-lib-sort aria-label="Sortera">

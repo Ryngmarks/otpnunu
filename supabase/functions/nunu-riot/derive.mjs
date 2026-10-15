@@ -8,12 +8,16 @@
  *   2: skada (typ, tagen, andel av laget, motståndarens) och tidslinjen (skada vid 10/14/20 min, dödsfall)
  *   3: ganks före 15:00 (gank.mjs)
  *   4: early game 5/10/15 min och first blood (early.mjs), lagen och motståndarnas AP-andel
+ *   5: positioner för alla, items/runor, lagens objectives och matchgenomgången (review.mjs).
+ *      Kräver 010_review.sql – utan den räknar synken som version 4 (LEGACY_VERSION).
  */
 import { deriveTimeline } from './damage.mjs';
 import { findGanks } from './gank.mjs';
 import { deriveEarly, deriveTeams } from './early.mjs';
+import { deriveLineup, deriveLoadout, deriveObjectives, deriveReview } from './review.mjs';
 
-export const DERIVED_VERSION = 4;
+export const DERIVED_VERSION = 5;
+export const LEGACY_VERSION = 4;
 export const NUNU_CHAMPION_ID = 20;
 
 /** Köer på Summoner's Rift – bara för dem hämtas tidslinjen. */
@@ -33,7 +37,7 @@ export function durationSeconds(info) {
  * aliases: kontots tidigare PUUID (från en annan Riot-nyckel) – äldre rådata kan innehålla dem.
  * Returnerar null om kontot inte var med i matchen.
  */
-export function deriveAccountMatch(match, puuid, timeline = null, aliases = []) {
+export function deriveAccountMatch(match, puuid, timeline = null, aliases = [], { v5 = true } = {}) {
   const info = (match && match.info) || {};
   const participants = info.participants || [];
   const ids = [puuid, ...aliases];
@@ -81,7 +85,13 @@ export function deriveAccountMatch(match, puuid, timeline = null, aliases = []) 
     ganks: tl ? findGanks(match, timeline, ids) : null,  // null = ingen tidslinje eller inte jungle
     early: tl ? deriveEarly(match, timeline, ids) : null,
     ...deriveTeams(match, ids),                           // allies, enemies, enemy_ap_share
-    derived_version: DERIVED_VERSION,
+    ...(v5 ? {
+      ...(deriveLineup(match, ids) || { ally_positions: null, enemy_positions: null }),
+      loadout: deriveLoadout(match, ids),
+      objectives_team: deriveObjectives(match, ids),
+      review: timeline ? deriveReview(match, timeline, ids) : null,
+    } : {}),
+    derived_version: v5 ? DERIVED_VERSION : LEGACY_VERSION,
   };
 }
 

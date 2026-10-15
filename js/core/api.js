@@ -6,6 +6,13 @@
  */
 
 const SESSION_KEY = 'nunu-auth-session';
+const MATCH_COLUMNS = [
+  'puuid', 'match_id', 'game_start', 'queue_id', 'duration_s', 'champion_id', 'team_position', 'win', 'remake',
+  'kills', 'deaths', 'assists', 'cs', 'gold', 'damage', 'vision', 'opponent_champion_id', 'derived_version',
+  'physical', 'magic', 'true_damage', 'taken', 'mitigated', 'objectives', 'team_share', 'opponent_damage',
+  'damage_at10', 'damage_at14', 'damage_at20', 'ganks', 'early', 'allies', 'enemies', 'enemy_ap_share',
+  'ally_positions', 'enemy_positions', 'loadout', 'objectives_team',
+].join(',');
 
 export class ApiError extends Error {
   constructor(status, message) {
@@ -135,7 +142,13 @@ export function createApi({ url, key, storage = window.localStorage, fetchImpl =
 
     accounts: () => rest('riot_account?select=*&order=linked_at.asc'),
     unlinkAccount: (puuid) => rest(`riot_account?puuid=eq.${encodeURIComponent(puuid)}`, { method: 'DELETE' }),
-    matches: () => all('account_match?select=*&order=game_start.desc'),
+    // Utan review (stor) – den hämtas när en match öppnas. Före 010_review.sql: allt som finns.
+    matches: () => all(`account_match?select=${MATCH_COLUMNS}&order=game_start.desc`)
+      .catch(() => all('account_match?select=*&order=game_start.desc')),
+    review: async (puuid, matchId) => {
+      const [r] = await rest(`account_match?select=review&puuid=eq.${encodeURIComponent(puuid)}&match_id=eq.${encodeURIComponent(matchId)}`).catch(() => [null]);
+      return (r && r.review) || null;
+    },
     mastery: () => rest('mastery?select=puuid,champion_id,level,points,last_play_time'),
     seasonHistory: () => rest('season_history?select=season,champion_id,games,wins,kills,deaths,assists,ended'),
     ranks: () => all('rank_snapshot?select=puuid,queue,tier,division,lp,wins,losses,taken_at&order=taken_at'),

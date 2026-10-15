@@ -708,3 +708,9 @@ body.is-locked .bg {
   .motion__skin.is-on { animation: none; transform: none; }
   .motion__dot::after { animation: none; }
 }
+
+/* Positionsikoner: en ruta som kartan, med lanen markerad */
+.chips button:disabled { opacity: .4; cursor: not-allowed; }
+.role { width: 15px; height: 15px; margin-right: 6px; vertical-align: -3px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.role .role__map { stroke-width: 1; opacity: .35; }
+.role .role__fill { fill: currentColor; stroke: none; }

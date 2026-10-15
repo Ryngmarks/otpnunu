@@ -53,16 +53,30 @@ function buildHistory(puuid, size, seed) {
       kills: remake ? 0 : Math.floor(rand() * 12), deaths: remake ? 0 : Math.floor(rand() * 9), assists: remake ? 0 : Math.floor(rand() * 16),
       totalMinionsKilled: remake ? 0 : 10 + Math.floor(rand() * 30), neutralMinionsKilled: remake ? 0 : nunu ? 110 + Math.floor(rand() * 90) : 0,
       goldEarned: 8000 + Math.floor(rand() * 7000), totalDamageDealtToChampions: 9000 + Math.floor(rand() * 20000), visionScore: 15 + Math.floor(rand() * 35),
+      ...(nunu ? {
+        item0: 6653, item1: 3020, item2: rand() < 0.5 ? 4645 : 3165, item3: rand() < 0.6 ? 3116 : 4633, item4: rand() < 0.5 ? 3089 : 0, item5: 0, item6: 3364,
+        summoner1Id: 11, summoner2Id: 4,
+        perks: { styles: [{ style: rand() < 0.7 ? 8200 : 8000, selections: [{ perk: rand() < 0.7 ? 8214 : 8010 }] }, { style: 8300 }] },
+      } : {}),
     };
     const enemy = { participantId: 6, puuid: `enemy-${n}`, teamId: 200, championName: CHAMPS[myPos === 'JUNGLE' ? opp : 22], teamPosition: myPos === 'JUNGLE' ? 'JUNGLE' : myPos, championId: myPos === 'JUNGLE' ? opp : 22, win: !win };
     const start = Date.UTC(2026, 9, 14) - i * 1000 * 3600 * (5 + Math.floor(rand() * 30));
     games.push({
       metadata: { matchId: `EUW1_${n}`, dataVersion: '2' },
-      info: { gameStartTimestamp: start, gameEndTimestamp: start + dur * 1000, gameDuration: dur, queueId: queue, gameVersion: '16.20.1', participants: [me, enemy, ...others(rand, win, me, enemy)] },
+      info: {
+        gameStartTimestamp: start, gameEndTimestamp: start + dur * 1000, gameDuration: dur, queueId: queue, gameVersion: '16.20.1', participants: [me, enemy, ...others(rand, win, me, enemy)],
+        teams: [100, 200].map((teamId) => {
+          const ours = (teamId === 100) === win;
+          return { teamId, objectives: { dragon: { first: ours, kills: ours ? 2 + Math.floor(rand() * 3) : Math.floor(rand() * 2) }, baron: { first: ours, kills: ours ? 1 : 0 }, horde: { first: !ours, kills: Math.floor(rand() * 4) }, tower: { first: ours, kills: ours ? 8 : 3 } } };
+        }),
+      },
     });
   }
   return games;
 }
+
+/** En väg genom blå sidans jungle (Riots koordinater 0–14 800). */
+const JUNGLE_PATH = [{ x: 560, y: 580 }, { x: 3820, y: 7950 }, { x: 3550, y: 6500 }, { x: 6900, y: 5400 }, { x: 7850, y: 4000 }, { x: 9866, y: 4414 }, { x: 7100, y: 7100 }, { x: 4300, y: 9800 }, { x: 2300, y: 11500 }, { x: 5000, y: 10500 }, { x: 8200, y: 2200 }, { x: 11800, y: 1500 }];
 
 /** Fyra lagkamrater och fyra motståndare med slumpade champions (för synergier och lagkompositioner). */
 function others(rand, win, me, enemy) {
@@ -91,7 +105,7 @@ function buildTimeline(match) {
   const frames = Array.from({ length: minutes + 1 }, (_, m) => ({
     timestamp: m * 60000,
     participantFrames: {
-      1: { damageStats: { totalDamageDoneToChampions: m * perMin, totalDamageTaken: m * 700 }, totalGold: 500 + m * (380 + (seed0 % 7) * 15), xp: m * 410, level: Math.min(18, 1 + Math.floor(m / 1.6)), minionsKilled: m * 1, jungleMinionsKilled: m * 5 },
+      1: { damageStats: { totalDamageDoneToChampions: m * perMin, totalDamageTaken: m * 700 }, totalGold: 500 + m * (380 + (seed0 % 7) * 15) + Math.round(Math.sin(m / 3 + seed0) * 250), xp: m * 410 + Math.round(Math.cos(m / 4 + seed0) * 200), level: Math.min(18, 1 + Math.floor(m / 1.6)), minionsKilled: m * 1, jungleMinionsKilled: m * 5, position: JUNGLE_PATH[(m + seed0) % JUNGLE_PATH.length] },
       6: { totalGold: 500 + m * (360 + (seed0 % 5) * 20), xp: m * 400, level: Math.min(18, 1 + Math.floor(m / 1.6)), minionsKilled: m, jungleMinionsKilled: m * 5 - (seed0 % 3) },
     },
     events: [],
@@ -117,6 +131,15 @@ function buildTimeline(match) {
       ],
     });
   }
+  // Elite monsters: drakar, voidgrubs och baron, fördelade efter vem som vann
+  const win = me.win;
+  const monster = (ms, type, sub, ours) => {
+    if (ms / 60000 > minutes) return;
+    frames[Math.floor(ms / 60000)].events.push({ type: 'ELITE_MONSTER_KILL', timestamp: ms, killerId: ours ? 1 : 6, killerTeamId: ours ? 100 : 200, monsterType: type, monsterSubType: sub, assistingParticipantIds: [], position: type === 'DRAGON' ? { x: 9866, y: 4414 } : { x: 5007, y: 10471 } });
+  };
+  monster(360000 + (seed % 5) * 20000, 'HORDE', null, seed % 2 === 0);
+  ['FIRE_DRAGON', 'OCEAN_DRAGON', 'CHEMTECH_DRAGON', 'HEXTECH_DRAGON'].forEach((sub, i) => monster(330000 + i * 330000 + (seed % 4) * 15000, 'DRAGON', sub, win ? i !== 1 : i === 1));
+  monster(1260000, 'BARON_NASHOR', null, win);
   return { metadata: { matchId: match.metadata.matchId }, info: { participants: match.info.participants.map((p) => ({ participantId: p.participantId, puuid: p.puuid })), frames } };
 }
 
@@ -339,6 +362,11 @@ export function createDevServer({ port = 8787, riot = createFakeRiot(), store = 
 
       if (req.method === 'GET') {
         let rows = store.visible[table](uid);
+        for (const [k, v] of u.searchParams) {
+          if (v.startsWith('eq.') && !['select', 'order'].includes(k)) rows = rows.filter((r) => String(r[k]) === v.slice(3));
+        }
+        const limit = Number(u.searchParams.get('limit'));
+        if (limit) rows = rows.slice(0, limit);
         const order = u.searchParams.get('order');
         if (order) {
           const [col, dir] = order.split('.');

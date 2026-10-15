@@ -106,6 +106,12 @@ export function createDb({ url, serviceKey, fetchImpl = fetch }) {
       return call(`raw_match?select=match_id,payload&match_id=${inList(matchIds)}`);
     },
 
+    /** Finns kolumnerna från 010_review.sql? Frågas en gång per anrop. */
+    supportsReview() {
+      this._review = this._review || call('account_match?select=review&limit=1').then(() => true, () => false);
+      return this._review;
+    },
+
     /** Matcher som räknats ut med en äldre version av reglerna – räknas om av synken. */
     async staleMatchIds(puuid, version) {
       const ids = [];

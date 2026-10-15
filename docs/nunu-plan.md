@@ -232,6 +232,7 @@ Dev-servern kör den riktiga webbsidan och den riktiga Edge Function-koden mot e
 - [ ] Kör `supabase/nunu/007_rank.sql` (rank-historik / elo).
 - [ ] Kör `supabase/nunu/008_scout.sql` (Live Scout: egna bedömningar).
 - [ ] Kör `supabase/nunu/009_library.sql` (Champion Library: strategi per champion).
+- [ ] Kör `supabase/nunu/010_review.sql` (positioner, items/runor, matchgenomgång). Synken räknar sedan om alla matcher ur sparad rådata.
 - [ ] Skapa en Supabase access token (*Account → Access Tokens*) och lägg in den som GitHub-secret
       `SUPABASE_ACCESS_TOKEN` – eller välj manuell driftsättning.
 - [ ] Ansök om en **Personal API Key** hos Riot (*Register Product*). Utvecklingsnyckeln gäller bara
@@ -309,8 +310,9 @@ kommentar. Ramen har samma färgmodell som Live Scout, beräknad på Ranked (Sol
 blandas aldrig in i Ranked men visas i detaljvyn. Alla konton och alla Nunu-matcher på Rift används
 (champion- och kontofiltren gäller, kö-filtret inte).
 
-*Bara junglers* (motståndare): räknar bara matcher där du spelade jungle, mot motståndarens jungler
-(`opponent_champion_id`). Lagkamraternas positioner sparas inte, så filtret gäller inte lagkamrater.
+Rollfiltret (Top, Jungle, Mid, Bot, Support) gäller både lagkamrater och motståndare och använder
+`ally_positions`/`enemy_positions` (010_review.sql, derived_version 5). Innan matcherna räknats om finns
+bara motståndarens jungler (`opponent_champion_id` när du spelade jungle).
 
 Detaljvyn (klick på ett kort, eller på ett namn i Live Scout): totalt, vinst per kö, KDA, damage,
 early game vid 10 min, matchhistorik och din strategi. Varje värde visar hur många matcher det bygger

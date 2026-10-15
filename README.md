@@ -21,6 +21,7 @@ supabase/nunu/006_early.sql      early game 5/10/15 min, lag och motståndarnas 
 supabase/nunu/007_rank.sql       rank-historik (elo) per konto och kö
 supabase/nunu/008_scout.sql      Live Scout: egen bedömning och anteckning per champion
 supabase/nunu/009_library.sql    Champion Library: egen strategi per champion och relation
+supabase/nunu/010_review.sql     positioner för alla, items/runor, objectives och matchgenomgång
 supabase/functions/nunu-riot/    Edge Function: kopplar Riot-konton och synkar matcher
 supabase/cleanup/                engångsskript (borttagning av gamla fotbollsappen)
 tests/                           tester + dev-server.mjs

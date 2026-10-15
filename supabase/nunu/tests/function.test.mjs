@@ -491,3 +491,78 @@ test('rank: utan tabellen (007 inte körd) fortsätter synken', async () => {
   db.lastRanks = async () => { throw new Error('nätverksfel'); };
   await assert.rejects(syncAccount({ riot: riotWith(fakeRiot({ history: { [P1]: 2 } })), db, account: acc(db) }), /nätverksfel/, 'andra fel syns fortfarande');
 });
+
+/* ---------------- Version 5: positioner, loadout, objectives och matchgenomgång ---------------- */
+
+test('derive v5: positioner, items/runor, objectives och matchgenomgång ur sparad data', async () => {
+  const { deriveLineup, deriveLoadout, deriveObjectives, deriveReview } = await import('../../functions/nunu-riot/review.mjs');
+  const m = matchJson(11);
+  Object.assign(m.info.participants[0], {
+    item0: 3020, item1: 0, item2: 4645, item6: 3364, summoner1Id: 11, summoner2Id: 4,
+    perks: { styles: [{ style: 8200, selections: [{ perk: 8214 }] }, { style: 8300 }] },
+  });
+  m.info.teams = [
+    { teamId: 100, objectives: { dragon: { first: true, kills: 3 }, baron: { first: false, kills: 1 }, horde: { first: true, kills: 6 } } },
+    { teamId: 200, objectives: { dragon: { first: false, kills: 1 }, baron: { first: false, kills: 0 } } },
+  ];
+  const t = timelineJson(11);
+  t.info.frames.forEach((f, i) => {
+    f.participantFrames[1] = { ...f.participantFrames[1], totalGold: 500 + i * 400, xp: i * 420, minionsKilled: i, jungleMinionsKilled: i * 5, position: { x: 1000 + i * 100, y: 2000 } };
+    f.participantFrames[6] = { totalGold: 500 + i * 380, xp: i * 400, minionsKilled: 0, jungleMinionsKilled: i * 5 };
+  });
+  t.info.frames[3].events[0].position = { x: 4000, y: 8000 };
+  t.info.frames[8].events.push({ type: 'CHAMPION_KILL', timestamp: 480000, killerId: 1, victimId: 6, assistingParticipantIds: [], position: { x: 9000, y: 4500 } });
+  t.info.frames[9].events.push({ type: 'ELITE_MONSTER_KILL', timestamp: 540000, killerId: 1, killerTeamId: 100, monsterType: 'DRAGON', monsterSubType: 'FIRE_DRAGON', position: { x: 9866, y: 4414 } });
+  t.info.frames[20].events.push({ type: 'ELITE_MONSTER_KILL', timestamp: 1200000, killerId: 6, killerTeamId: 200, monsterType: 'BARON_NASHOR', position: { x: 5007, y: 10471 } });
+
+  assert.deepEqual(deriveLineup(m, P1), { ally_positions: ['MIDDLE'], enemy_positions: ['JUNGLE'] });
+  assert.deepEqual(deriveLoadout(m, P1), { items: [3020, 4645], trinket: 3364, keystone: 8214, primary: 8200, secondary: 8300, spells: [11, 4] });
+  const o = deriveObjectives(m, P1);
+  assert.deepEqual([o.mine.dragon, o.mine.firstDragon, o.mine.horde, o.theirs.dragon, o.theirs.baron], [3, true, 6, 1, 0]);
+
+  const r = deriveReview(m, t, P1);
+  assert.deepEqual(r.minutes[10], [4500, 4200, 60, 4300, 4000, 50]);
+  assert.equal(r.path.length, 15);
+  assert.deepEqual(r.path[0], [1100, 2000]);
+  assert.deepEqual(r.events.map((e) => [e.k, e.t, e.vs]), [['death', 210, 121], ['kill', 480, 121]]);
+  assert.deepEqual(r.monsters.map((x) => [x.type, x.sub, x.mine, x.me]), [['DRAGON', 'FIRE_DRAGON', true, true], ['BARON_NASHOR', null, false, false]]);
+  assert.equal(deriveReview(m, null, P1), null, 'ingen tidslinje');
+
+  const row = deriveAccountMatch(m, P1, t);
+  assert.equal(row.derived_version, 5);
+  assert.deepEqual(row.ally_positions, ['MIDDLE']);
+  assert.ok(row.review && row.loadout && row.objectives_team);
+  const legacy = deriveAccountMatch(m, P1, t, [], { v5: false });
+  assert.equal(legacy.derived_version, 4);
+  assert.ok(!('review' in legacy) && !('ally_positions' in legacy), 'utan 010 skrivs inga nya kolumner');
+});
+
+test('sync: utan 010_review.sql räknas inget om och inga nya kolumner skrivs', async () => {
+  const db = memoryDb();
+  db.supportsReview = async () => false;
+  const riot = riotWith(fakeRiot({ history: { [P1]: 6 } }));
+  await linkAccount({ riot, db, userId: 'user-1', riotId: 'Rymm3n#EUW' });
+  for (let n = 1; n <= 6; n++) {
+    await db.insertRawMatches([{ match_id: `EUW1_${n}`, region: 'europe', game_start: null, payload: matchJson(n) }]);
+    await db.upsertAccountMatches([{ ...deriveAccountMatch(matchJson(n), P1, null, [], { v5: false }) }]);
+  }
+  acc(db).backfill_done = true;
+  const fake = fakeRiot({ history: { [P1]: 6 } });
+  const r = await syncAccount({ riot: riotWith(fake), db, account: acc(db) });
+  assert.equal(r.imported, 0, 'version 4 räcker utan 010');
+  assert.equal(fake.calls.timelines, 0);
+
+  db.supportsReview = async () => true; // efter 010: allt räknas om ur sparad rådata
+  const r2 = await syncAccount({ riot: riotWith(fake), db, account: acc(db) });
+  assert.equal(r2.imported, 6);
+  assert.equal(fake.calls.matches, 0, 'rådatan fanns redan');
+  assert.ok([...db.t.account_match.values()].every((x) => x.derived_version === 5 && 'ally_positions' in x));
+});
+
+test('db: supportsReview frågar databasen en gång', async () => {
+  let calls = 0;
+  const db = createDb({ url: 'https://x.supabase.co', serviceKey: 'sb_secret_x', fetchImpl: async (u) => { calls++; return new Response(u.includes('select=review') ? '{"message":"column account_match.review does not exist"}' : '[]', { status: u.includes('select=review') ? 400 : 200 }); } });
+  assert.equal(await db.supportsReview(), false);
+  assert.equal(await db.supportsReview(), false);
+  assert.equal(calls, 1);
+});

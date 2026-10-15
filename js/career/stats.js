@@ -480,6 +480,31 @@ export function junglerRows(rows) {
     .map((r) => ({ ...r, enemies: [r.opponent_champion_id] }));
 }
 
+export const POSITIONS = { TOP: 'Top', JUNGLE: 'Jungle', MIDDLE: 'Mid', BOTTOM: 'Bot', UTILITY: 'Support' };
+
+/**
+ * Bara champions på en viss position (TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY) som lagkamrat eller
+ * motståndare. Använder ally_positions/enemy_positions (010_review.sql). Matcher som inte räknats
+ * om än: motståndarens jungler finns ändå (opponent_champion_id när du spelade jungle).
+ */
+export function positionRows(rows, side, position) {
+  const key = SCOUT_SIDES[side];
+  const pk = side === 'with' ? 'ally_positions' : 'enemy_positions';
+  const out = [];
+  for (const r of rows) {
+    if (Array.isArray(r[pk]) && Array.isArray(r[key])) {
+      const ids = r[key].filter((_, i) => r[pk][i] === position);
+      if (ids.length) out.push({ ...r, [key]: ids });
+    } else if (side === 'against' && position === 'JUNGLE' && r.team_position === 'JUNGLE' && r.opponent_champion_id != null) {
+      out.push({ ...r, enemies: [r.opponent_champion_id] });
+    }
+  }
+  return out;
+}
+
+/** Har matcherna positioner för lagkamraterna (räknade med 010_review.sql)? */
+export const hasPositions = (rows) => rows.some((r) => Array.isArray(r.ally_positions));
+
 /** Matcherna där championen var lagkamrat (side 'with') eller motståndare ('against'), nyast först. */
 export function championGames(rows, championId, side) {
   const key = SCOUT_SIDES[side];

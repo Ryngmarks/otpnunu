@@ -559,7 +559,8 @@ export function scoutPickHtml(e, champs, side, baseline) {
 /* ---------------- Champion Library ---------------- */
 
 const RELATION = { against: 'Motståndare', with: 'Lagkamrat' };
-const relationOf = (side, role) => (role === 'jungle' && side === 'against' ? 'Motståndarjungler' : RELATION[side]);
+const ROLE_LABEL = { TOP: 'Top', JUNGLE: 'Jungle', MIDDLE: 'Mid', BOTTOM: 'Bot', UTILITY: 'Support' };
+const relationOf = (side, role) => (ROLE_LABEL[role] ? `${RELATION[side]} · ${ROLE_LABEL[role]}` : RELATION[side]);
 
 /** Kort etikett på kortet; hela förklaringen finns i scoutLabel. */
 export function scoutShort(e) {
@@ -615,7 +616,7 @@ const LIB_SORTS = {
 
 /** Biblioteket: kort per champion med Solo/Duo och Flex, färg enligt Live Scout-modellen. */
 export function libraryHtml(table, champs, { q = '', color = '', sort = 'games', limit = 24, role = 'all' } = {}) {
-  if (!table.list.length) return `<p class="empty">${role === 'jungle' ? 'Inga matcher där du spelat jungle mot en motståndarjungler.' : 'Inga matcher med lagdata än – synka för att fylla på.'}</p>`;
+  if (!table.list.length) return `<p class="empty">${ROLE_LABEL[role] ? `Inga matcher med ${ROLE_LABEL[role].toLowerCase()} som ${RELATION[table.side].toLowerCase()} än.` : 'Inga matcher med lagdata än – synka för att fylla på.'}</p>`;
   const needle = q.trim().toLowerCase();
   const counts = { green: 0, red: 0, orange: 0, gray: 0 };
   table.list.forEach((e) => { counts[e.color] += 1; });
@@ -626,7 +627,7 @@ export function libraryHtml(table, champs, { q = '', color = '', sort = 'games',
     : [...list].sort(LIB_SORTS[sort] || LIB_SORTS.games);
   const chip = (k, label) => `<button type="button" data-lib-color="${k}" class="${color === k ? 'is-active' : ''}">${k ? `<i class="scout__dot scout--${k}" aria-hidden="true"></i>` : ''}${label}${k ? ` <small>${counts[k]}</small>` : ''}</button>`;
   return `
-    <p class="card__hint">${table.games} rankade matcher${role === 'jungle' && table.side === 'against' ? ' som jungle' : ''} · ${table.list.length} ${role === 'jungle' && table.side === 'against' ? 'junglers' : 'champions'} · din Ranked-vinst ${table.baseline ?? '–'} % · färgen jämför din bedömning med Ranked (Solo/Duo + Flex)</p>
+    <p class="card__hint">${table.games} rankade matcher · ${table.list.length} ${ROLE_LABEL[role] ? `champions som ${ROLE_LABEL[role].toLowerCase()}` : 'champions'} · din Ranked-vinst ${table.baseline ?? '–'} % · färgen jämför din bedömning med Ranked (Solo/Duo + Flex)</p>
     <div class="chips scout__colors">${chip('', 'Alla')}${chip('green', 'Grön')}${chip('red', 'Röd')}${chip('orange', 'Orange')}${chip('gray', 'Grå')}</div>
     ${list.length ? `<ul class="lib-grid">${list.slice(0, limit).map((e) => libCard(e, champs, table.side, role)).join('')}</ul>` : '<p class="empty">Ingen champion matchar.</p>'}
     ${list.length > limit ? `<button type="button" class="btn btn--ghost btn--block" data-lib-more>Visa fler (${list.length - limit} till)</button>` : ''}`;
@@ -687,7 +688,7 @@ export function championDetailHtml(p, champs, accounts, { limit = 10, role = 'al
         ${tile('Med i first blood', e.firstBlood.value == null ? '–' : `${e.firstBlood.value} %`, nOf(e.firstBlood.n))}
       </div>
 
-      <h3 class="sub">Matcher ${p.side === 'with' ? 'med' : 'mot'} ${esc(name)}${role === 'jungle' && p.side === 'against' ? ' som jungler' : ''}</h3>
+      <h3 class="sub">Matcher ${p.side === 'with' ? 'med' : 'mot'} ${esc(name)}${ROLE_LABEL[role] ? ` som ${ROLE_LABEL[role].toLowerCase()}` : ''}</h3>
       ${history}
     </div>`;
 }

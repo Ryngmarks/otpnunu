@@ -50,3 +50,7 @@ $PSQL -d "$DB" -f 008_scout_test.sql 2>&1 | sed -n 's/^psql:[^ ]* \(NOTICE\|ERRO
 PGOPTIONS='-c client_min_messages=warning' $PSQL -d "$DB" -f ../009_library.sql
 PGOPTIONS='-c client_min_messages=warning' $PSQL -d "$DB" -f ../009_library.sql
 $PSQL -d "$DB" -f 009_library_test.sql 2>&1 | sed -n 's/^psql:[^ ]* \(NOTICE\|ERROR\):  //p; /GODKÄNDA/p'
+# Matchgenomgång och positioner: två gånger (ska gå att köra om)
+PGOPTIONS='-c client_min_messages=warning' $PSQL -d "$DB" -f ../010_review.sql
+PGOPTIONS='-c client_min_messages=warning' $PSQL -d "$DB" -f ../010_review.sql
+$PSQL -d "$DB" -f 010_review_test.sql 2>&1 | sed -n 's/^psql:[^ ]* \(NOTICE\|ERROR\):  //p; /GODKÄNDA/p'

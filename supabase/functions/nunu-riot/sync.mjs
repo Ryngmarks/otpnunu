@@ -3,7 +3,7 @@
  * Får in riot (riot.mjs) och db (db.mjs) – testas med låtsasversioner.
  */
 import { HttpError, RateLimitError, parseRiotId, regionFor } from './riot.mjs';
-import { DERIVED_VERSION, RIFT_QUEUES, deriveAccountMatch, deriveDeaths, deriveMastery, deriveRanks, rankChanged, rawMatchRow } from './derive.mjs';
+import { DERIVED_VERSION, LEGACY_VERSION, RIFT_QUEUES, deriveAccountMatch, deriveDeaths, deriveMastery, deriveRanks, rankChanged, rawMatchRow } from './derive.mjs';
 
 export const BATCH_SIZE = 20;     // matcher per anrop: match + tidslinje = 2 Riot-anrop, och Edge Functions har begränsad CPU-tid
 const MAX_HISTORY = 2000;         // så långt bak vi letar efter match-id:n
@@ -131,7 +131,9 @@ export async function syncAccount({ riot, db, account: given, batchSize = BATCH_
 
     const known = await db.knownMatchIds(account.puuid);
     const missing = await findMissingIds({ riot, account, known });
-    const stale = await db.staleMatchIds(account.puuid, DERIVED_VERSION);
+    // Version 5 kräver 010_review.sql; utan den räknas inget om (och inget skrivs till saknade kolumner)
+    const v5 = db.supportsReview ? await db.supportsReview() : true;
+    const stale = await db.staleMatchIds(account.puuid, v5 ? DERIVED_VERSION : LEGACY_VERSION);
     todo = [...missing, ...stale.filter((id) => !missing.includes(id))];
     const batch = todo.slice(0, batchSize);
 
@@ -157,7 +159,7 @@ export async function syncAccount({ riot, db, account: given, batchSize = BATCH_
             if (timeline) await db.storeTimeline(id, timeline);
           }
         }
-        const row = deriveAccountMatch(match, account.puuid, timeline, aliases);
+        const row = deriveAccountMatch(match, account.puuid, timeline, aliases, { v5 });
         if (row) {
           derived.push(row);
           deaths.push(...deriveDeaths(match, account.puuid, timeline, aliases));

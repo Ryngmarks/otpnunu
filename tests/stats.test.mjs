@@ -472,3 +472,21 @@ test('trendSeries: rullande snitt äldst först, med antal matcher bakom varje p
   assert.equal(few.totals.winrate, 100);
   assert.equal(s.trendSeries([]).totals.kda, null);
 });
+
+test('positionRows: lagkamrater och motståndare per position, med reserv för motståndarens jungler', async () => {
+  const s = await import('../js/career/stats.js');
+  const rows = [
+    { queue_id: 420, win: true, team_position: 'JUNGLE', opponent_champion_id: 64, allies: [412, 103, 51, 86], ally_positions: ['UTILITY', 'MIDDLE', 'BOTTOM', 'TOP'], enemies: [64, 7, 22], enemy_positions: ['JUNGLE', 'MIDDLE', 'BOTTOM'] },
+    { queue_id: 420, win: false, team_position: 'JUNGLE', opponent_champion_id: 121, allies: [412], ally_positions: ['UTILITY'], enemies: [121, 64], enemy_positions: ['JUNGLE', 'TOP'] },
+    { queue_id: 420, win: true, team_position: 'JUNGLE', opponent_champion_id: 64, allies: [99], enemies: [64, 5] }, // äldre rad utan positioner
+  ];
+  const sup = s.positionRows(rows, 'with', 'UTILITY');
+  assert.equal(sup.length, 2);
+  assert.deepEqual(s.libraryTable(sup, [], 'with').list.map((e) => [e.championId, e.solo.games, e.solo.wins]), [[412, 2, 1]]);
+  const jg = s.positionRows(rows, 'against', 'JUNGLE');
+  assert.deepEqual(jg.map((r) => r.enemies), [[64], [121], [64]]);
+  assert.equal(s.positionRows(rows, 'against', 'TOP').length, 1);
+  assert.equal(s.positionRows(rows, 'with', 'TOP').length, 1, 'utan positioner: inga lagkamrater');
+  assert.equal(s.hasPositions(rows), true);
+  assert.equal(s.hasPositions([rows[2]]), false);
+});
