@@ -341,3 +341,13 @@ objectives på tidslinjen, kartan med din väg de första 15 minuterna, objectiv
 ganks och build (items, runor, summoner spells från Data Dragon).
 Data: `account_match.review` (hämtas när matchen öppnas), `loadout`, `objectives_team`,
 `ally_positions`/`enemy_positions` – derived_version 5 (010_review.sql). `matchReview` i stats.js.
+
+## Playbook
+
+Fliken *Playbook*: välj motståndarens jungler (porträtt av de du mött mest, sök, eller från champ select
+i Scout). Spelplanen visar vinstring och V–F mot hen, vad som avgjort dina matcher mot hen (dödsfall och
+guld vid 10 min, lyckad första gank – staplar mot din vinst mot hen), vilken lane första ganken lönar sig
+i, guldkurvan i vinster och förluster, senaste matcherna (öppnar matchgenomgången), dina bästa duos per
+position och din strategi (samma `champion_opinion` som Scout och Biblioteket). Alla värden visar antal
+matcher; under 5 markeras som osäkert. Motor: `playbook` i stats.js (positionRows, libraryTable,
+gankReport, impactReport, earlyReport).

@@ -3,9 +3,9 @@
  */
 import { createApi, ApiError } from './core/api.js';
 import { loadChampions, loadExtras } from './core/ddragon.js';
-import { NUNU, QUEUE_FILTERS, filterMatches, summarize, recentForm, byAccount, opponents, masterySummary, careerSummary, damageReport, gankReport, earlyReport, synergyReport, matchupReport, impactReport, eloSeries, overviewKpis, insights, trendSeries, scoutTable, scoutPicks, libraryTable, championProfile, positionRows, hasPositions, matchReview } from './career/stats.js';
+import { NUNU, QUEUE_FILTERS, filterMatches, summarize, recentForm, byAccount, opponents, masterySummary, careerSummary, damageReport, gankReport, earlyReport, synergyReport, matchupReport, impactReport, eloSeries, overviewKpis, insights, trendSeries, scoutTable, scoutPicks, libraryTable, championProfile, positionRows, hasPositions, matchReview, playbook } from './career/stats.js';
 import { mountMotion } from './career/motion.js';
-import { esc, heroHtml, tilesHtml, formHtml, accountsHtml, opponentsHtml, matchesHtml, careerHtml, damageHtml, gankHtml, earlyHtml, synergyHtml, matchupHtml, impactHtml, eloHtml, kpisHtml, insightsHtml, goldLineHtml, scoutHtml, scoutPickHtml, libraryHtml, championDetailHtml, championEditorHtml, matchReviewHtml, rvChartHtml } from './career/view.js';
+import { esc, heroHtml, tilesHtml, formHtml, accountsHtml, opponentsHtml, matchesHtml, careerHtml, damageHtml, gankHtml, earlyHtml, synergyHtml, matchupHtml, impactHtml, eloHtml, kpisHtml, insightsHtml, goldLineHtml, scoutHtml, scoutPickHtml, libraryHtml, championDetailHtml, championEditorHtml, matchReviewHtml, rvChartHtml, playbookHtml, playbookQuickHtml } from './career/view.js';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -13,7 +13,8 @@ const cfg = window.APP_CONFIG || {};
 const FILTER_KEY = 'nunu-filters';
 const TAB_KEY = 'nunu-tab';
 const PICKS_KEY = 'nunu-scout-picks';
-const TABS = ['oversikt', 'scout', 'bibliotek', 'early', 'ganks', 'matchups', 'matcher', 'karriar'];
+const PB_KEY = 'nunu-playbook';
+const TABS = ['oversikt', 'scout', 'bibliotek', 'playbook', 'early', 'ganks', 'matchups', 'matcher', 'karriar'];
 const PAGE = 20;
 
 const state = {
@@ -30,6 +31,8 @@ const state = {
   library: { side: 'against', q: '', color: '', sort: 'games', limit: 24, role: 'all' },
   detail: null, // { championId, side, limit, role } när detaljvyn är öppen
   review: null, // { puuid, matchId, metric } när matchgenomgången är öppen
+  playbook: { championId: null }, // vald motståndarjungler
+  pbEditorFor: null,
   reviews: new Map(), // hämtade matchgenomgångar (account_match.review)
   extras: null, // runor och summoner spells (laddas första gången en match öppnas)
   picks: { allies: [null, null, null, null], enemies: [null, null, null, null, null] },
@@ -41,6 +44,7 @@ const state = {
 };
 try { Object.assign(state.filters, JSON.parse(localStorage.getItem(FILTER_KEY))); } catch (e) { /* ignorera */ }
 try { const p = JSON.parse(localStorage.getItem(PICKS_KEY)); if (p && Array.isArray(p.allies) && Array.isArray(p.enemies)) state.picks = p; } catch (e) { /* ignorera */ }
+try { const id = Number(localStorage.getItem(PB_KEY)); if (id > 0) state.playbook.championId = id; } catch (e) { /* ignorera */ }
 try { const t = localStorage.getItem(TAB_KEY); if (TABS.includes(t)) state.tab = t; } catch (e) { /* ignorera */ }
 
 let api;
@@ -141,6 +145,7 @@ function render() {
 
   renderScout(rows);
   renderLibrary();
+  renderPlaybook(rows);
 
   // Filterkontroller
   $$('[data-champion]').forEach((b) => b.classList.toggle('is-active', b.dataset.champion === f.champion));
@@ -216,6 +221,29 @@ function openDetail(championId, side, role = 'all') {
   const dlg = $('[data-lib-dialog]');
   if (!dlg.open) dlg.showModal();
   dlg.scrollTop = 0;
+}
+
+/* ---------------- Playbook ---------------- */
+
+function renderPlaybook(rows) {
+  const id = state.playbook.championId;
+  const pb = playbook(rows, id, state.opinions);
+  $('[data-pb-quick]').innerHTML = playbookQuickHtml(pb, state.champs, state.picks.enemies);
+  $('[data-pb-plan]').innerHTML = playbookHtml(pb, state.champs, state.accounts);
+  const input = $('[data-pb-input]');
+  if (document.activeElement !== input) input.value = id == null ? '' : state.champs.name(id);
+  // Strategin ritas bara om när championen byts – så inget du skriver försvinner
+  const editorKey = `${id}|${state.champs.name(id)}`;
+  if (state.pbEditorFor !== editorKey) {
+    state.pbEditorFor = editorKey;
+    $('[data-pb-editor]').innerHTML = id == null ? '' : championEditorHtml({ ...pb.entry, championId: id, side: 'against' }, state.champs);
+  }
+}
+
+function pickPlaybook(id) {
+  state.playbook.championId = id;
+  try { id == null ? localStorage.removeItem(PB_KEY) : localStorage.setItem(PB_KEY, String(id)); } catch (e) { /* ignorera */ }
+  render();
 }
 
 /* ---------------- Matchgenomgång ---------------- */
@@ -395,8 +423,9 @@ function bind() {
   });
 
   document.addEventListener('click', async (e) => {
-    const t = e.target.closest('[data-action],[data-champion],[data-queue],[data-unlink],[data-more],[data-tab],[data-opinion],[data-scout-side],[data-scout-color],[data-scout-more],[data-lib-open],[data-lib-close],[data-lib-side],[data-lib-tab-side],[data-lib-color],[data-lib-more],[data-lib-more-games],[data-lib-role],[data-match-open],[data-rv-close],[data-rv-metric]');
+    const t = e.target.closest('[data-action],[data-champion],[data-queue],[data-unlink],[data-more],[data-tab],[data-opinion],[data-scout-side],[data-scout-color],[data-scout-more],[data-lib-open],[data-lib-close],[data-lib-side],[data-lib-tab-side],[data-lib-color],[data-lib-more],[data-lib-more-games],[data-lib-role],[data-match-open],[data-rv-close],[data-rv-metric],[data-pb-pick]');
     if (!t) return;
+    if (t.dataset.pbPick) return pickPlaybook(Number(t.dataset.pbPick));
     if (t.dataset.matchOpen) { const [puuid, id] = t.dataset.matchOpen.split('|'); return openReview(puuid, id); }
     if (t.hasAttribute('data-rv-close')) return $('[data-rv-dialog]').close();
     if (t.dataset.rvMetric) {
@@ -441,6 +470,7 @@ function bind() {
     switch (t.dataset.action) {
       case 'sync': sync(); break;
       case 'cancel-sync': state.cancelSync = true; break;
+      case 'pb-clear': pickPlaybook(null); break;
       case 'clear-picks':
         state.picks = { allies: [null, null, null, null], enemies: [null, null, null, null, null] };
         savePicks();
@@ -482,6 +512,11 @@ function bind() {
       const id = Number(el.dataset.champ);
       const cur = state.opinions.find((o) => o.champion_id === id && o.side === el.dataset.side);
       if ((cur ? cur.strategy || '' : '') !== el.value.trim()) setOpinion(id, el.dataset.side, { strategy: el.value.trim() });
+    }
+    if (el.matches('[data-pb-input]')) {
+      const id = findChampion(el.value);
+      if (el.value.trim() && id == null) toast(`Hittar ingen champion som heter ”${el.value.trim()}”`);
+      if (id != null) pickPlaybook(id);
     }
     if (el.matches('[data-pick]')) {
       const [team, i] = el.dataset.pick.split(':');

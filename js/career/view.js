@@ -942,3 +942,97 @@ export function matchReviewHtml(m, champs, extras, accounts, { metric = 'gold' }
       ${m.loadout ? `<h3 class="sub">Build</h3>${rvBuildHtml(m.loadout, champs, extras)}` : ''}
     </div>`;
 }
+
+/* ---------------- Playbook ---------------- */
+
+/** Snabbval: de junglers du mött mest, som porträtt med vinst %. */
+export function playbookQuickHtml(pb, champs, picks = []) {
+  const card = (e, extra = '') => `
+    <button type="button" class="pb-pick scout--${e.color} ${pb.championId === e.championId ? 'is-active' : ''}" data-pb-pick="${e.championId}"${art(champs.tile && champs.tile(e.championId), champs.icon(e.championId))}>
+      <span class="pb-pick__name">${esc(champs.name(e.championId))}</span>
+      <span class="pb-pick__wr">${e.games ? `${e.winrate} % · ${e.games}` : e.normal && e.normal.games ? `Normal · ${e.normal.games}` : 'ny'}</span>${extra}
+    </button>`;
+  const fromSelect = picks.filter((id) => id != null);
+  return `
+    ${fromSelect.length ? `<p class="pb-label">Från champ select i Scout</p><div class="pb-quick pb-quick--select">${fromSelect.map((id) => card(pb.quick.find((e) => e.championId === id) || { championId: id, color: 'gray', games: 0 })).join('')}</div>` : ''}
+    <p class="pb-label">Junglers du mött mest</p>
+    ${pb.quick.length ? `<div class="pb-quick">${pb.quick.map((e) => card(e)).join('')}</div>` : '<p class="empty">Inga motståndarjunglers än – synka för att fylla på.</p>'}`;
+}
+
+/** Vinst som en ring som fylls. */
+const ring = (wr, label) => {
+  const C = 2 * Math.PI * 42;
+  const v = wr == null ? 0 : wr / 100;
+  return `<svg class="pb-ring" viewBox="0 0 100 100" role="img" aria-label="${esc(label)}">
+    <circle cx="50" cy="50" r="42" class="pb-ring__bg"/>
+    <circle cx="50" cy="50" r="42" class="pb-ring__win" stroke-dasharray="${(v * C).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 50 50)"/>
+    <text x="50" y="54" text-anchor="middle" class="pb-ring__v">${wr == null ? '–' : `${wr}%`}</text>
+  </svg>`;
+};
+
+export function playbookHtml(pb, champs, accounts) {
+  if (pb.championId == null) {
+    return `<div class="pb-empty"><p>Välj motståndarens jungler ovan – då byggs en spelplan av dina egna matcher mot hen.</p>${pb.duos.length ? duosHtml(pb, champs) : ''}</div>`;
+  }
+  const e = pb.entry;
+  const name = champs.name(pb.championId);
+  const r = pb.record;
+  const diff = r.winrate == null || pb.jungleBaseline == null ? null : r.winrate - pb.jungleBaseline;
+  const keys = pb.keys.map((k) => `
+    <div class="pb-key pb-key--${k.tone}">
+      <span class="pb-key__label">${esc(k.label)}</span>
+      <b class="pb-key__v">${k.winrate == null ? '–' : `${k.winrate} %`}</b>
+      <span class="pb-key__bar"><i style="width:${k.winrate ?? 0}%"></i>${r.winrate != null ? `<em style="left:${r.winrate}%" title="Din vinst mot ${esc(name)}"></em>` : ''}</span>
+      <small>vinst · ${gamesOf(k.games)}${k.games < 5 ? ' · osäkert' : ''}</small>
+    </div>`).join('');
+  const lanes = pb.lanes.length ? `
+    <div class="pb-lanes" role="img" aria-label="Vinst när första ganken går till respektive lane">
+      ${pb.lanes.map((l) => `
+        <div class="pb-lane">
+          <span class="pb-lane__v">${l.firstWin.winrate == null ? '–' : `${l.firstWin.winrate} %`}</span>
+          <span class="pb-lane__col"><i style="height:${l.firstWin.winrate ?? 0}%"></i></span>
+          <span class="pb-lane__name">${roleIcon({ top: 'TOP', mid: 'MIDDLE', bot: 'BOTTOM' }[l.lane])}${esc(l.lane)}</span>
+          <small>${gamesOf(l.firstWin.games)} · ${l.success == null ? '–' : `${l.success} %`} lyckade</small>
+        </div>`).join('')}
+    </div>` : '<p class="empty">Inga ganks registrerade mot hen än.</p>';
+  const early = goldLineHtml(pb.early);
+  return `
+    <header class="pb-hero scout--${e.color}"${art(champs.splash && champs.splash(pb.championId), champs.tile && champs.tile(pb.championId), champs.icon(pb.championId))}>
+      <div class="pb-hero__body">
+        <p class="eyebrow">Playbook · motståndarjungler</p>
+        <h3 class="pb-hero__name">${esc(name)}</h3>
+        <span class="scout__tag"><i class="scout__dot" aria-hidden="true"></i>${esc(scoutLabel(e))}</span>
+        ${e.note ? `<p class="pb-hero__note">“${esc(e.note)}”</p>` : ''}
+      </div>
+      <div class="pb-hero__score">
+        ${ring(r.winrate, `${r.winrate ?? '–'} % vinst mot ${name}`)}
+        <p><b>${r.wins} V – ${r.losses} F</b><br>${gamesOf(r.games)}${diff == null ? '' : ` · <span class="${diff >= 0 ? 'pos' : 'neg'}">${diff >= 0 ? '+' : '−'}${Math.abs(diff)}</span> mot ditt snitt`}</p>
+        ${opinionBtns(e, 'against')}
+      </div>
+    </header>
+
+    ${r.games ? `
+      <h3 class="sub">Det här har avgjort dina matcher mot ${esc(name)}</h3>
+      <div class="pb-keys">${keys || '<p class="empty">För lite tidslinjedata.</p>'}</div>
+      <p class="card__hint pb-hint">Strecket = din vinst mot ${esc(name)} totalt. Samband, inte orsak.</p>
+
+      <div class="grid2 pb-grid">
+        <div><h3 class="sub">Var första ganken lönar sig</h3>${lanes}</div>
+        <div><h3 class="sub">Guld mot ${esc(name)}</h3>${early || '<p class="empty">Ingen tidslinjedata.</p>'}</div>
+      </div>
+
+      <h3 class="sub">Senaste matcherna mot ${esc(name)}</h3>
+      ${matchesHtml(pb.recent, champs, accounts, 5)}` : `<p class="empty pb-none">Du har inte mött ${esc(name)} som jungler än – din strategi nedan sparas ändå.</p>`}
+    ${pb.duos.length ? duosHtml(pb, champs) : ''}`;
+}
+
+function duosHtml(pb, champs) {
+  return `
+    <h3 class="sub">Dina bästa duos</h3>
+    <div class="pb-duos">${pb.duos.map((d) => `
+      <div class="pb-duo"${art(champs.tile && champs.tile(d.best.championId), champs.icon(d.best.championId))}>
+        <span class="pb-duo__pos">${roleIcon(d.position)}${esc(POSITION_NAMES[d.position])}</span>
+        <span class="pb-duo__name">${esc(champs.name(d.best.championId))}</span>
+        <span class="pb-duo__wr"><b>${d.best.all.winrate} %</b> · ${gamesOf(d.best.all.games)}</span>
+      </div>`).join('')}</div>`;
+}

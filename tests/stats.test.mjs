@@ -527,3 +527,46 @@ test('matchReview: lagen per position, kurvor mot motståndaren och händelser',
   assert.doesNotMatch(html, /undefined|NaN|null/);
   assert.match(v.matchReviewHtml(none, champs, null, [], {}), /Kurvor och karta saknas/);
 });
+
+test('playbook: spelplan mot en motståndarjungler med samma motor som Scout och Biblioteket', async () => {
+  const s = await import('../js/career/stats.js');
+  const v = await import('../js/career/view.js');
+  const early = (gold, opp, d) => ({ me: { 5: { gold: 2000, xp: 1, cs: 1, d: 0 }, 10: { gold, xp: 4000, cs: 50, d } }, opp: { 5: { gold: 2000, xp: 1, cs: 1 }, 10: { gold: opp, xp: 4000, cs: 50 } }, firstBlood: null });
+  let n = 0;
+  const g = (win, opp, extra = {}) => ({
+    match_id: `M${++n}`, game_start: `2026-03-${String(n).padStart(2, '0')}`, puuid: 'p', queue_id: 420, win, champion_id: 20,
+    team_position: 'JUNGLE', opponent_champion_id: opp, kills: 3, deaths: 2, assists: 5, cs: 150, duration_s: 1800,
+    allies: [412, 103, 51, 86], ally_positions: ['UTILITY', 'MIDDLE', 'BOTTOM', 'TOP'],
+    enemies: [opp, 7, 22, 1, 2], enemy_positions: ['JUNGLE', 'MIDDLE', 'BOTTOM', 'TOP', 'UTILITY'], ...extra,
+  });
+  const rows = [
+    g(true, 64, { early: early(4500, 4000, 0), ganks: [{ t: 200000, lane: 'bot', takedowns: 1, kills: 1, died: false }] }),
+    g(true, 64, { early: early(4400, 4000, 0), ganks: [{ t: 220000, lane: 'bot', takedowns: 1, kills: 1, died: false }] }),
+    g(false, 64, { early: early(3500, 4200, 2), ganks: [{ t: 300000, lane: 'top', takedowns: 1, kills: 0, died: true }] }),
+    g(true, 121), g(false, 121), g(true, 121),
+  ];
+  const opinions = [{ champion_id: 64, side: 'against', opinion: -1, note: 'Invaderar tidigt', strategy: 'Starta på topsidan' }];
+  const pb = s.playbook(rows, 64, opinions);
+  assert.deepEqual(pb.record, { games: 3, wins: 2, losses: 1, winrate: 67 });
+  assert.equal(pb.entry.strategy, 'Starta på topsidan');
+  assert.deepEqual(pb.quick.map((e) => e.championId).sort(), [121, 64]);
+  const key = (label) => pb.keys.find((k) => k.label === label);
+  assert.deepEqual([key('2+ dödsfall före 10 min').games, key('2+ dödsfall före 10 min').winrate], [1, 0]);
+  assert.deepEqual([key('Före i guld vid 10 min').games, key('Före i guld vid 10 min').winrate], [2, 100]);
+  assert.deepEqual(pb.lanes.find((l) => l.lane === 'bot').firstWin, { games: 2, winrate: 100 });
+  assert.equal(pb.duos.find((d) => d.position === 'UTILITY').best.championId, 412);
+  assert.equal(pb.recent[0].match_id, 'M3');
+
+  const none = s.playbook(rows, 999, []);
+  assert.equal(none.record.games, 0);
+  assert.equal(s.playbook(rows, null).championId, null);
+
+  const champs = { name: (id) => `C${id}`, icon: () => null, tile: () => null, splash: () => null };
+  const html = v.playbookHtml(pb, champs, []);
+  assert.match(html, /Det här har avgjort/);
+  assert.match(html, /“Invaderar tidigt”/);
+  assert.match(html, /Dina bästa duos/);
+  assert.doesNotMatch(html, /undefined|NaN|null/);
+  assert.match(v.playbookHtml(none, champs, []), /inte mött C999/);
+  assert.doesNotMatch(v.playbookQuickHtml(pb, champs, [64, null]), /undefined|NaN|null/);
+});

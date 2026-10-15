@@ -653,6 +653,71 @@ export function impactReport(rows) {
   };
 }
 
+/* ---------------- Playbook ---------------- */
+
+const merge = (label, ...groups) => {
+  const list = groups.filter(Boolean);
+  const games = list.reduce((t, g) => t + g.games, 0);
+  const wins = list.reduce((t, g) => t + (g.wins || 0), 0);
+  return { label, games, wins, winrate: pct(wins, games) };
+};
+
+/**
+ * Spelplan mot en motståndarjungler. Allt räknas med samma motor som Scout och Biblioteket:
+ * matcherna mot championen som jungler (positionRows), din bedömning och strategi, vad som avgjort
+ * dina matcher mot hen (dödsfall och guld vid 10, första ganken), lanes att ganka och dina bästa duos.
+ */
+export function playbook(rows, championId, opinions = []) {
+  const jungle = positionRows(rows, 'against', 'JUNGLE');
+  const table = libraryTable(jungle, opinions, 'against');
+  const quick = [...table.list]
+    .filter((e) => e.ranked.games + e.normal.games > 0)
+    .sort((a, b) => (b.ranked.games + b.normal.games) - (a.ranked.games + a.normal.games))
+    .slice(0, 12);
+  const baseline = winrateOf(rows).winrate;
+  const duos = ['UTILITY', 'MIDDLE', 'TOP', 'BOTTOM'].map((pos) => {
+    const list = libraryTable(positionRows(rows, 'with', pos), [], 'with').list
+      .map((e) => ({ ...e, all: { games: e.ranked.games + e.normal.games, wins: e.ranked.wins + e.normal.wins } }))
+      .filter((e) => e.all.games >= 3)
+      .map((e) => ({ ...e, all: { ...e.all, winrate: pct(e.all.wins, e.all.games) } }))
+      .sort((a, b) => b.all.winrate - a.all.winrate || b.all.games - a.all.games);
+    return { position: pos, best: list[0] || null };
+  }).filter((d) => d.best);
+  if (championId == null) return { championId: null, quick, baseline, duos };
+
+  const games = championGames(jungle, championId, 'against');
+  const entry = table.list.find((e) => e.championId === championId)
+    || { ...scoutPicks({ list: [] }, [championId])[0], strategy: '', ...(() => {
+      const o = opinions.find((x) => x.champion_id === championId && x.side === 'against');
+      return o ? { opinion: o.opinion, note: o.note || '', strategy: o.strategy || '' } : {};
+    })() };
+  const record = winrateOf(games);
+  const imp = impactReport(games);
+  const g = gankReport(games);
+  const keys = [];
+  if (imp) {
+    keys.push({ ...imp.deaths10[0], label: '0 dödsfall före 10 min', tone: 'up' });
+    keys.push({ ...imp.deaths10[2], label: '2+ dödsfall före 10 min', tone: 'down' });
+    keys.push({ ...merge('Före i guld vid 10 min', imp.goldDiff10[3], imp.goldDiff10[4]), tone: 'up' });
+    keys.push({ ...merge('Efter i guld vid 10 min', imp.goldDiff10[0], imp.goldDiff10[1]), tone: 'down' });
+  }
+  if (g) keys.push({ ...g.first.lyckad, label: 'Lyckad första gank', tone: 'up' });
+  return {
+    championId,
+    quick,
+    baseline,
+    duos,
+    entry,
+    record: { games: record.games, wins: record.wins, losses: record.games - record.wins, winrate: record.winrate },
+    jungleBaseline: winrateOf(jungle).winrate,
+    keys: keys.filter((k) => k.games > 0),
+    lanes: g ? g.lanes : [],
+    gankGames: g ? g.games : 0,
+    early: games.length ? earlyReport(games) : null,
+    recent: games.slice(0, 5),
+  };
+}
+
 /* ---------------- Matchgenomgång ---------------- */
 
 export const POSITION_ORDER = ['TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'UTILITY'];

@@ -79,6 +79,7 @@
       <button type="button" data-tab="oversikt">Översikt</button>
       <button type="button" data-tab="scout">Scout</button>
       <button type="button" data-tab="bibliotek">Bibliotek</button>
+      <button type="button" data-tab="playbook">Playbook</button>
       <button type="button" data-tab="early">Early game</button>
       <button type="button" data-tab="ganks">Ganks</button>
       <button type="button" data-tab="matchups">Matchups</button>
@@ -218,6 +219,21 @@
           </select>
         </div>
         <div data-library></div>
+      </section>
+    </div>
+
+    <!-- ============ PLAYBOOK ============ -->
+    <div class="panel" data-panel="playbook" hidden>
+      <section class="card pb">
+        <h2 class="card__title">Playbook</h2>
+        <p class="card__hint">Spelplan mot motståndarens jungler, byggd av dina egna matcher · med filtren ovan</p>
+        <div class="pb-search">
+          <input class="select scout__search" type="search" list="scout-champs" placeholder="Skriv motståndarjungler…" autocomplete="off" data-pb-input aria-label="Motståndarjungler">
+          <button type="button" class="btn btn--ghost" data-action="pb-clear">Rensa</button>
+        </div>
+        <div data-pb-quick></div>
+        <div data-pb-plan></div>
+        <div data-pb-editor></div>
       </section>
     </div>
 
