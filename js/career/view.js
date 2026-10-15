@@ -1036,3 +1036,48 @@ function duosHtml(pb, champs) {
         <span class="pb-duo__wr"><b>${d.best.all.winrate} %</b> · ${gamesOf(d.best.all.games)}</span>
       </div>`).join('')}</div>`;
 }
+
+/* ---------------- Live: pågående match ---------------- */
+
+export const gameClock = (sec) => `${Math.floor(Math.max(0, sec) / 60)}:${String(Math.floor(Math.max(0, sec) % 60)).padStart(2, '0')}`;
+
+/** Livekortet: båda lagen som championkort med din historik och bedömning. tables = { with, against } (scoutTable). */
+export function liveHtml(live, champs, tables, now = Date.now()) {
+  const look = (side, id) => tables[side].list.find((e) => e.championId === id)
+    || { championId: id, games: 0, winrate: null, color: 'gray', opinion: null, note: '' };
+  const card = (p, side, extra = {}) => {
+    const e = side ? look(side, p.championId) : null;
+    const name = champs.name(p.championId);
+    return `
+      <div class="live-pl ${e ? `scout--${e.color}` : 'is-me'} ${extra.jungler ? 'is-jungler' : ''}"${art(champs.tile && champs.tile(p.championId), champs.icon(p.championId))} title="${esc(name)}${e && e.note ? ` – ${esc(e.note)}` : ''}">
+        ${extra.jungler ? '<span class="live-pl__jg">JG</span>' : ''}
+        ${e && e.opinion ? `<span class="live-pl__op">${e.opinion > 0 ? '👍' : '👎'}</span>` : ''}
+        <span class="live-pl__name">${esc(name)}</span>
+        <span class="live-pl__wr">${!e ? '<b>Du</b>' : e.games ? `<b>${e.winrate} %</b><br>${gamesOf(e.games)}` : 'Inga<br>matcher'}</span>
+      </div>`;
+  };
+  const secs = live.startedAt ? (now - live.startedAt) / 1000 : live.gameLength;
+  const jg = live.enemyJungler;
+  const bans = (ids) => ids.map((id) => `<span class="live-ban"${art(champs.icon(id))} title="${esc(champs.name(id))}"></span>`).join('');
+  return `
+    <div class="live__head">
+      <span class="live__badge"><i></i>Live</span>
+      <span class="live__meta">${esc(queueLabel(live.queueId))} · <b data-live-clock data-start="${live.startedAt || ''}" data-length="${live.gameLength}">${live.startedAt ? gameClock(secs) : 'laddar'}</b>${live.account && live.account.name ? ` · ${esc(live.account.name)}` : ''}</span>
+      <button type="button" class="live__refresh" data-action="live-check" aria-label="Uppdatera">↻</button>
+    </div>
+    <div class="live__teams">
+      <div class="live__team">
+        <p class="live__label">Ditt lag</p>
+        <div class="live__row">${card(live.me, null)}${live.allies.map((p) => card(p, 'with', { jungler: p.championId === live.allyJungler })).join('')}</div>
+      </div>
+      <div class="live__team">
+        <p class="live__label live__label--enemy">Motståndare</p>
+        <div class="live__row">${live.enemies.map((p) => card(p, 'against', { jungler: p.championId === jg })).join('')}</div>
+      </div>
+    </div>
+    ${live.bans.mine.length || live.bans.theirs.length ? `<p class="live__bans"><span>Bans</span>${bans(live.bans.mine)}<span class="live__vs">mot</span>${bans(live.bans.theirs)}</p>` : ''}
+    <div class="live__actions">
+      ${jg ? `<button type="button" class="btn btn--primary" data-live-playbook="${jg}">Spelplan mot ${esc(champs.name(jg))}</button>` : ''}
+      <button type="button" class="btn btn--ghost" data-tab="scout">Visa i Scout</button>
+    </div>`;
+}

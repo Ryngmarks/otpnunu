@@ -97,6 +97,8 @@
     </nav>
 
     <!-- ============ ÖVERSIKT ============ -->
+    <section class="live card" data-live hidden aria-live="polite"></section>
+
     <div class="panel" data-panel="oversikt">
       <section class="motion" data-motion-card hidden aria-labelledby="motion-title">
         <h2 class="sr-only" id="motion-title">Nunu i rörelse – nyckeltal över tid</h2>
@@ -147,7 +149,11 @@
     <div class="panel" data-panel="scout" hidden>
       <section class="card">
         <h2 class="card__title">Champ select</h2>
-        <p class="card__hint">Skriv in lagen – din historik och din egen bedömning visas direkt · med filtren ovan</p>
+        <p class="card__hint">Skriv in lagen – eller hämta dem från din pågående match · din historik och din egen bedömning visas direkt · med filtren ovan</p>
+        <div class="live-check">
+          <button type="button" class="btn btn--primary" data-action="live-check">Hämta min pågående match</button>
+          <span class="muted" data-live-status>Kontrolleras automatiskt medan sidan är öppen.</span>
+        </div>
         <p class="legend scout__legend">
           <span><i class="scout__dot scout--green"></i>Grön: din bedömning är positiv och statistiken stödjer den</span>
           <span><i class="scout__dot scout--red"></i>Röd: negativ och statistiken stödjer den</span>

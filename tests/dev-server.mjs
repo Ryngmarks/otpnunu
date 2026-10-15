@@ -144,6 +144,7 @@ function buildTimeline(match) {
 }
 
 export function createFakeRiot({ rateLimit = { count: 100, windowMs: 6000 } } = {}) {
+  const liveOn = { value: true, started: Date.now() - 5 * 60000 }; // slå av med riot.liveOn.value = false
   const accounts = {
     'Rymm3n#EUW': { puuid: 'p'.repeat(70) + 'rymm3n01', history: 230, seed: 1, nunuPoints: 1930343, level: 178 },
     'Smurf#EUW': { puuid: 's'.repeat(70) + 'smurf001', history: 45, seed: 2, nunuPoints: 210000, level: 32 },
@@ -192,6 +193,18 @@ export function createFakeRiot({ rateLimit = { count: 100, windowMs: 6000 } } = 
           { queueType: 'RANKED_FLEX_SR', tier: 'PLATINUM', rank: 'I', leaguePoints: 22, wins: 41, losses: 30 }]
         : [{ queueType: 'RANKED_SOLO_5x5', tier: 'PLATINUM', rank: 'III', leaguePoints: 51, wins: 22, losses: 19 }]);
     }
+    // Pågående match: Rymm3n spelar Nunu mot Lee Sin (för att kunna se Live i dev)
+    if ((m = p.match(/spectator\/v5\/active-games\/by-summoner\/(.+)$/))) {
+      const a = Object.values(accounts).find((x) => x.puuid === m[1]);
+      if (!a || !a.riotId.startsWith('Rymm3n') || !liveOn.value) return json(404, {});
+      const pl = (championId, teamId, s1, s2, extra = {}) => ({ championId, teamId, spell1Id: s1, spell2Id: s2, puuid: `p-live-${championId}`, riotId: `${CHAMPS[championId] || 'Spelare'}#EUW`, bot: false, perks: { perkIds: [8214] }, ...extra });
+      return json(200, {
+        gameId: 7000000001, gameQueueConfigId: 420, gameMode: 'CLASSIC', platformId: 'EUW1', gameStartTime: liveOn.started, gameLength: Math.round((Date.now() - liveOn.started) / 1000),
+        participants: [pl(20, 100, 11, 4, { puuid: a.puuid, riotId: 'Rymm3n#EUW' }), pl(412, 100, 4, 14), pl(103, 100, 4, 12), pl(63, 100, 4, 7), pl(86, 100, 4, 12),
+          pl(64, 200, 4, 11), pl(517, 200, 4, 14), pl(22, 200, 4, 7), pl(266, 200, 4, 12), pl(89, 200, 4, 3)],
+        bannedChampions: [{ championId: 121, teamId: 100, pickTurn: 1 }, { championId: 254, teamId: 200, pickTurn: 6 }],
+      });
+    }
     if (p.includes('champion-masteries/by-puuid/')) {
       const a = Object.values(accounts).find((x) => p.includes(x.puuid));
       return json(200, [
@@ -201,7 +214,7 @@ export function createFakeRiot({ rateLimit = { count: 100, windowMs: 6000 } } = 
     }
     return json(404, {});
   }
-  return { fetchImpl, accounts };
+  return { fetchImpl, accounts, liveOn };
 }
 
 /* ---------------- Låtsas-Supabase: lagring med samma regler som 001_init.sql ---------------- */

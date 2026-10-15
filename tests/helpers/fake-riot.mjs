@@ -62,7 +62,7 @@ export function timelineJson(n) {
   };
 }
 
-export function fakeRiot({ history = { [P1]: 250, [P2]: 0, [PX]: 250 }, rateLimitAfter = Infinity, ranks = null, leagueStatus = 200 } = {}) {
+export function fakeRiot({ history = { [P1]: 250, [P2]: 0, [PX]: 250 }, rateLimitAfter = Infinity, ranks = null, leagueStatus = 200, live = null } = {}) {
   const calls = { total: 0, matches: 0, timelines: 0, idPages: 0 };
   const res = (status, body, headers = {}) => new Response(JSON.stringify(body), { status, headers });
   const accounts = { 'Rymm3n#EUW': P1, 'Smurf#EUW': P2, 'Annan#EUW': PX };
@@ -107,10 +107,27 @@ export function fakeRiot({ history = { [P1]: 250, [P2]: 0, [PX]: 250 }, rateLimi
         { queueType: 'CHERRY', tier: 'GOLD', rank: 'I', leaguePoints: 0, wins: 1, losses: 1 },
       ]);
     }
+    if ((m = p.match(/spectator\/v5\/active-games\/by-summoner\/(.+)$/))) {
+      return live && live[m[1]] ? res(200, live[m[1]]) : res(404, { status: { message: 'Data not found', status_code: 404 } });
+    }
     if (p.includes('champion-masteries/by-puuid/')) {
       return res(200, [{ championId: 20, championLevel: 178, championPoints: 1930343, lastPlayTime: 1.76e12 }, { championId: 64, championLevel: 5, championPoints: 20000 }]);
     }
     return res(404, {});
   }
   return { fetchImpl, calls };
+}
+
+/** Pågående match (spectator-v5) för P1: Nunu med Smite mot Lee Sin med Smite. */
+export function liveGameJson(puuid = P1) {
+  const p = (championId, teamId, spell1Id, spell2Id, extra = {}) => ({ championId, teamId, spell1Id, spell2Id, puuid: `x-${championId}`, riotId: `Spelare${championId}#EUW`, bot: false, perks: { perkIds: [8214, 8226], perkStyle: 8200, perkSubStyle: 8300 }, ...extra });
+  return {
+    gameId: 7123456789, mapId: 11, gameMode: 'CLASSIC', gameType: 'MATCHED', gameQueueConfigId: 420, platformId: 'EUW1',
+    gameStartTime: Date.UTC(2026, 9, 15, 18, 0), gameLength: 312,
+    participants: [
+      p(20, 100, 11, 4, { puuid, riotId: 'Rymm3n#EUW' }), p(412, 100, 4, 14), p(103, 100, 4, 12), p(51, 100, 4, 7), p(86, 100, 4, 12),
+      p(64, 200, 4, 11), p(7, 200, 4, 14), p(22, 200, 4, 7), p(122, 200, 4, 12), p(117, 200, 4, 3),
+    ],
+    bannedChampions: [{ championId: 121, teamId: 100, pickTurn: 1 }, { championId: -1, teamId: 100, pickTurn: 2 }, { championId: 254, teamId: 200, pickTurn: 6 }],
+  };
 }

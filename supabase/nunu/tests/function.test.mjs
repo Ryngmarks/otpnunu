@@ -566,3 +566,41 @@ test('db: supportsReview frågar databasen en gång', async () => {
   assert.equal(await db.supportsReview(), false);
   assert.equal(calls, 1);
 });
+
+/* ---------------- Live: pågående match ---------------- */
+
+test('live: summarizeLive – lagen ur ditt perspektiv, jungler via Smite, inga andras PUUID', async () => {
+  const { summarizeLive } = await import('../../functions/nunu-riot/live.mjs');
+  const { liveGameJson } = await import('../../../tests/helpers/fake-riot.mjs');
+  const l = summarizeLive(liveGameJson(), { puuid: P1, game_name: 'Rymm3n' });
+  assert.equal(l.me.championId, 20);
+  assert.equal(l.me.smite, true);
+  assert.deepEqual(l.allies.map((p) => p.championId), [412, 103, 51, 86]);
+  assert.deepEqual(l.enemies.map((p) => p.championId), [64, 7, 22, 122, 117]);
+  assert.equal(l.enemyJungler, 64);
+  assert.equal(l.allyJungler, null, 'du är jungler');
+  assert.deepEqual(l.bans, { mine: [121], theirs: [254] });
+  assert.equal(l.queueId, 420);
+  assert.equal(l.me.keystone, 8214);
+  assert.ok(!JSON.stringify(l).includes('x-64'), 'andra spelares PUUID skickas inte vidare');
+  assert.equal(summarizeLive(liveGameJson(), { puuid: 'någon' }), null);
+});
+
+test('live: action live letar på alla egna konton och svarar null utan match', async () => {
+  const { liveGameJson } = await import('../../../tests/helpers/fake-riot.mjs');
+  const db = memoryDb();
+  const send = async (fake, action) => {
+    const handler = createHandler({ getUser: async () => ({ id: 'user-1' }), makeDeps: () => ({ riot: riotWith(fake), db }) });
+    const res = await handler(new Request('https://x/functions/v1/nunu-riot', { method: 'POST', headers: { authorization: 'Bearer t' }, body: JSON.stringify({ action }) }));
+    return { status: res.status, body: await res.json() };
+  };
+  await linkAccount({ riot: riotWith(fakeRiot()), db, userId: 'user-1', riotId: 'Smurf#EUW' });
+  await linkAccount({ riot: riotWith(fakeRiot()), db, userId: 'user-1', riotId: 'Rymm3n#EUW' });
+  const none = await send(fakeRiot(), 'live');
+  assert.deepEqual([none.status, none.body.live, none.body.checked], [200, null, 2]);
+  const fake = fakeRiot({ live: { [P1]: liveGameJson() } });
+  const found = await send(fake, 'live');
+  assert.equal(found.status, 200);
+  assert.equal(found.body.live.enemyJungler, 64);
+  assert.equal(found.body.live.account.name, 'Rymm3n');
+});

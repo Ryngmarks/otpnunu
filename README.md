@@ -1,7 +1,7 @@
 # otpnunu
 
 Statistik, mastery och matchhistorik för Nunu & Willump – från flera Riot-konton.
-På sikt även matchanalys, en personlig Playbook och livefunktioner.
+Med matchgenomgång, Champion Library, Playbook och live: din pågående match hämtas från Riot och fyller i Scout och Playbook.
 
 Plan, arkitektur, datamodell och säkerhet: [`docs/nunu-plan.md`](docs/nunu-plan.md).
 

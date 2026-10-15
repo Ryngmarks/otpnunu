@@ -351,3 +351,16 @@ i, guldkurvan i vinster och förluster, senaste matcherna (öppnar matchgenomgå
 position och din strategi (samma `champion_opinion` som Scout och Biblioteket). Alla värden visar antal
 matcher; under 5 markeras som osäkert. Motor: `playbook` i stats.js (positionRows, libraryTable,
 gankReport, impactReport, earlyReport).
+
+## Live: pågående match
+
+Edge Function `{ action: 'live' }` frågar Riots spectator-v5 (`/lol/spectator/v5/active-games/by-summoner/{puuid}`)
+för dina konton i tur och ordning och returnerar en sammanfattning (`live.mjs`): båda lagen, spells,
+keystone, bans och motståndarens jungler (känns igen på Smite – spectator ger inga positioner). Andra
+spelares PUUID skickas inte vidare. Riot visar matchen först när den laddats in, inte under champ select.
+
+Appen kollar när sidan öppnas, var 90:e sekund medan den syns och direkt när du kommer tillbaka till
+fliken, eller med knappen *Hämta min pågående match* i Scout. När en match hittas: livekort överst
+(båda lagen som championkort med din vinst, antal matcher och bedömning, jungler markerad, bans, klocka),
+Scout fylls i och Playbook öppnas mot motståndarens jungler – en gång per match, så egna ändringar ligger
+kvar. Ingen ny tabell; Riot-nyckeln stannar i Edge Function.

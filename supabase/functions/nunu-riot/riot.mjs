@@ -107,6 +107,10 @@ export function createRiot({
     leagueEntries: (platform, puuid) =>
       get(`${platformUrl(platform)}/lol/league/v4/entries/by-puuid/${enc(puuid)}`),
 
+    /** Pågående match (spectator-v5). null när kontot inte spelar just nu. */
+    activeGame: (platform, puuid) =>
+      get(`${platformUrl(platform)}/lol/spectator/v5/active-games/by-summoner/${enc(puuid)}`, { allow404: true }),
+
     masteries: (platform, puuid) =>
       get(`${platformUrl(platform)}/lol/champion-mastery/v4/champion-masteries/by-puuid/${enc(puuid)}`),
   };

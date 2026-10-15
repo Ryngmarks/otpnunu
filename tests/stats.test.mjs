@@ -570,3 +570,28 @@ test('playbook: spelplan mot en motståndarjungler med samma motor som Scout och
   assert.match(v.playbookHtml(none, champs, []), /inte mött C999/);
   assert.doesNotMatch(v.playbookQuickHtml(pb, champs, [64, null]), /undefined|NaN|null/);
 });
+
+test('liveHtml: båda lagen med historik, jungler markerad och bans', async () => {
+  const s = await import('../js/career/stats.js');
+  const v = await import('../js/career/view.js');
+  const rows = [
+    { queue_id: 420, win: true, allies: [412], enemies: [64] }, { queue_id: 420, win: false, allies: [412], enemies: [64] },
+  ];
+  const opinions = [{ champion_id: 64, side: 'against', opinion: -1, note: 'Farlig level 3' }];
+  const tables = { with: s.scoutTable(rows, opinions, 'with'), against: s.scoutTable(rows, opinions, 'against') };
+  const p = (championId, smite = false) => ({ championId, spells: smite ? [11, 4] : [4, 14], smite, keystone: null, name: null, bot: false });
+  const live = {
+    gameId: 1, queueId: 420, startedAt: Date.UTC(2026, 9, 15, 18, 0), gameLength: 0, account: { name: 'Rymm3n' },
+    me: p(20, true), allies: [p(412), p(103), p(51), p(86)], enemies: [p(64, true), p(7), p(22), p(1), p(2)],
+    enemyJungler: 64, allyJungler: null, bans: { mine: [121], theirs: [] },
+  };
+  const champs = { name: (id) => `C${id}`, icon: () => null, tile: () => null };
+  const html = v.liveHtml(live, champs, tables, Date.UTC(2026, 9, 15, 18, 7, 5));
+  assert.match(html, /7:05/);
+  assert.match(html, /Spelplan mot C64/);
+  assert.match(html, /50 %<\/b><br>2 matcher/);
+  assert.match(html, /is-jungler/);
+  assert.match(html, /Farlig level 3/);
+  assert.match(html, /👎/);
+  assert.doesNotMatch(html, /undefined|NaN|null/);
+});

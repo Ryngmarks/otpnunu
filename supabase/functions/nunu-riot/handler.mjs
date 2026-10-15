@@ -4,11 +4,13 @@
  *   POST { action: 'link', riotId: 'Namn#Tagg', platform?: 'euw1' }
  *   POST { action: 'sync', puuid?: '…' }          (utan puuid: alla egna konton)
  *   POST { action: 'sync-all' } + header x-nunu-cron (schemalagd synk, alla konton)
+ *   POST { action: 'live' }                       (pågående match på något av de egna kontona)
  *
  * Kräver inloggad användare (Supabase-token i Authorization) som finns i nunu.member.
  * Allt Deno-/Supabase-specifikt ligger i index.ts – här bara webbstandard (Request/Response).
  */
-import { HttpError } from './riot.mjs';
+import { HttpError, RateLimitError } from './riot.mjs';
+import { findLiveGame } from './live.mjs';
 import { linkAccount, syncAccount } from './sync.mjs';
 
 const ALLOWED_ORIGINS = ['https://ryngmarks.github.io'];
@@ -93,6 +95,17 @@ export function createHandler({ getUser, makeDeps, cronSecret = '', log = consol
           if (!accounts.length) throw new HttpError(404, 'Kontot finns inte i din profil');
         }
         return reply(200, await syncAccounts({ riot, db, accounts }));
+      }
+
+      if (body.action === 'live') {
+        const profile = await db.ensureProfile(user.id);
+        const accounts = await db.listAccounts(profile.id);
+        try {
+          return reply(200, { live: await findLiveGame({ riot, accounts }), checked: accounts.length });
+        } catch (err) {
+          if (err instanceof RateLimitError) return reply(200, { live: null, checked: 0, retryAfter: err.retryAfter });
+          throw err;
+        }
       }
 
       throw new HttpError(400, 'Okänd action');

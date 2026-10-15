@@ -5,7 +5,7 @@ import { createApi, ApiError } from './core/api.js';
 import { loadChampions, loadExtras } from './core/ddragon.js';
 import { NUNU, QUEUE_FILTERS, filterMatches, summarize, recentForm, byAccount, opponents, masterySummary, careerSummary, damageReport, gankReport, earlyReport, synergyReport, matchupReport, impactReport, eloSeries, overviewKpis, insights, trendSeries, scoutTable, scoutPicks, libraryTable, championProfile, positionRows, hasPositions, matchReview, playbook } from './career/stats.js';
 import { mountMotion } from './career/motion.js';
-import { esc, heroHtml, tilesHtml, formHtml, accountsHtml, opponentsHtml, matchesHtml, careerHtml, damageHtml, gankHtml, earlyHtml, synergyHtml, matchupHtml, impactHtml, eloHtml, kpisHtml, insightsHtml, goldLineHtml, scoutHtml, scoutPickHtml, libraryHtml, championDetailHtml, championEditorHtml, matchReviewHtml, rvChartHtml, playbookHtml, playbookQuickHtml } from './career/view.js';
+import { esc, heroHtml, tilesHtml, formHtml, accountsHtml, opponentsHtml, matchesHtml, careerHtml, damageHtml, gankHtml, earlyHtml, synergyHtml, matchupHtml, impactHtml, eloHtml, kpisHtml, insightsHtml, goldLineHtml, scoutHtml, scoutPickHtml, libraryHtml, championDetailHtml, championEditorHtml, matchReviewHtml, rvChartHtml, playbookHtml, playbookQuickHtml, liveHtml, gameClock } from './career/view.js';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -33,6 +33,7 @@ const state = {
   review: null, // { puuid, matchId, metric } när matchgenomgången är öppen
   playbook: { championId: null }, // vald motståndarjungler
   pbEditorFor: null,
+  live: { data: null, appliedGameId: null, checkedAt: 0, busy: false, retryAt: 0 },
   reviews: new Map(), // hämtade matchgenomgångar (account_match.review)
   extras: null, // runor och summoner spells (laddas första gången en match öppnas)
   picks: { allies: [null, null, null, null], enemies: [null, null, null, null, null] },
@@ -146,6 +147,7 @@ function render() {
   renderScout(rows);
   renderLibrary();
   renderPlaybook(rows);
+  renderLive(rows);
 
   // Filterkontroller
   $$('[data-champion]').forEach((b) => b.classList.toggle('is-active', b.dataset.champion === f.champion));
@@ -221,6 +223,77 @@ function openDetail(championId, side, role = 'all') {
   const dlg = $('[data-lib-dialog]');
   if (!dlg.open) dlg.showModal();
   dlg.scrollTop = 0;
+}
+
+/* ---------------- Live: pågående match ---------------- */
+
+const LIVE_EVERY_MS = 90000;
+let liveTimer = null;
+let liveClock = null;
+
+function renderLive(rows) {
+  const box = $('[data-live]');
+  const live = state.live.data;
+  box.hidden = !live;
+  const status = $('[data-live-status]');
+  if (status) {
+    status.textContent = state.live.busy ? 'Letar efter en pågående match…'
+      : live ? `Live: du spelar ${state.champs.name(live.me.championId)} – lagen är ifyllda nedan.`
+        : state.live.checkedAt ? `Ingen pågående match (kollat ${new Date(state.live.checkedAt).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })}). Riot visar matchen först när den laddats in.`
+          : 'Kontrolleras automatiskt medan sidan är öppen.';
+  }
+  if (!live) return;
+  const tables = { with: scoutTable(rows, state.opinions, 'with'), against: scoutTable(rows, state.opinions, 'against') };
+  box.innerHTML = liveHtml(live, state.champs, tables);
+}
+
+/** Fyll Scout och Playbook med den pågående matchen – en gång per match, så egna ändringar får vara kvar. */
+function applyLive(live) {
+  if (state.live.appliedGameId === live.gameId) return;
+  state.live.appliedGameId = live.gameId;
+  const pad = (list, n) => [...list, ...Array(n).fill(null)].slice(0, n);
+  const enemies = [...live.enemies].sort((a, b) => (b.championId === live.enemyJungler) - (a.championId === live.enemyJungler));
+  state.picks = { allies: pad(live.allies.map((p) => p.championId), 4), enemies: pad(enemies.map((p) => p.championId), 5) };
+  savePicks();
+  if (live.enemyJungler) {
+    state.playbook.championId = live.enemyJungler;
+    try { localStorage.setItem(PB_KEY, String(live.enemyJungler)); } catch (e) { /* ignorera */ }
+  }
+  toast(`Live! ${state.champs.name(live.me.championId)} mot ${live.enemyJungler ? state.champs.name(live.enemyJungler) : 'motståndarna'} – Scout och Playbook är ifyllda`);
+}
+
+async function checkLive(manual = false) {
+  if (state.live.busy || !state.accounts.length) return;
+  if (!manual && Date.now() < state.live.retryAt) return;
+  state.live.busy = true;
+  if (manual) render();
+  try {
+    const r = await api.live();
+    const was = state.live.data;
+    state.live.data = r.live || null;
+    state.live.checkedAt = Date.now();
+    if (r.retryAfter) state.live.retryAt = Date.now() + r.retryAfter * 1000;
+    if (r.live) applyLive(r.live);
+    else if (was) toast('Matchen är slut – synka om en stund för att se den i historiken');
+    else if (manual) toast(r.retryAfter ? `Riot begränsar takten – försök igen om ${r.retryAfter} s` : 'Ingen pågående match just nu');
+  } catch (err) {
+    if (manual) fail(err);
+  } finally {
+    state.live.busy = false;
+    render();
+  }
+}
+
+/** Kollar var 90:e sekund medan sidan syns, och direkt när den blir synlig igen. */
+function startLive() {
+  clearInterval(liveTimer);
+  liveTimer = setInterval(() => { if (document.visibilityState === 'visible') checkLive(); }, LIVE_EVERY_MS);
+  clearInterval(liveClock);
+  liveClock = setInterval(() => {
+    const el = document.querySelector('[data-live-clock]');
+    if (el && el.dataset.start) el.textContent = gameClock((Date.now() - Number(el.dataset.start)) / 1000);
+  }, 1000);
+  checkLive();
 }
 
 /* ---------------- Playbook ---------------- */
@@ -423,8 +496,13 @@ function bind() {
   });
 
   document.addEventListener('click', async (e) => {
-    const t = e.target.closest('[data-action],[data-champion],[data-queue],[data-unlink],[data-more],[data-tab],[data-opinion],[data-scout-side],[data-scout-color],[data-scout-more],[data-lib-open],[data-lib-close],[data-lib-side],[data-lib-tab-side],[data-lib-color],[data-lib-more],[data-lib-more-games],[data-lib-role],[data-match-open],[data-rv-close],[data-rv-metric],[data-pb-pick]');
+    const t = e.target.closest('[data-action],[data-champion],[data-queue],[data-unlink],[data-more],[data-tab],[data-opinion],[data-scout-side],[data-scout-color],[data-scout-more],[data-lib-open],[data-lib-close],[data-lib-side],[data-lib-tab-side],[data-lib-color],[data-lib-more],[data-lib-more-games],[data-lib-role],[data-match-open],[data-rv-close],[data-rv-metric],[data-pb-pick],[data-live-playbook]');
     if (!t) return;
+    if (t.dataset.livePlaybook) {
+      state.tab = 'playbook';
+      try { localStorage.setItem(TAB_KEY, state.tab); } catch (err) { /* ignorera */ }
+      return pickPlaybook(Number(t.dataset.livePlaybook));
+    }
     if (t.dataset.pbPick) return pickPlaybook(Number(t.dataset.pbPick));
     if (t.dataset.matchOpen) { const [puuid, id] = t.dataset.matchOpen.split('|'); return openReview(puuid, id); }
     if (t.hasAttribute('data-rv-close')) return $('[data-rv-dialog]').close();
@@ -471,16 +549,22 @@ function bind() {
       case 'sync': sync(); break;
       case 'cancel-sync': state.cancelSync = true; break;
       case 'pb-clear': pickPlaybook(null); break;
+      case 'live-check': checkLive(true); break;
       case 'clear-picks':
         state.picks = { allies: [null, null, null, null], enemies: [null, null, null, null, null] };
         savePicks();
         render();
         break;
-      case 'logout': await api.signOut(); showLogin(); break;
+      case 'logout': clearInterval(liveTimer); state.live.data = null; await api.signOut(); showLogin(); break;
     }
   });
 
   $('[data-filter-account]').addEventListener('change', (e) => { state.filters.account = e.target.value; saveFilters(); });
+
+  // Live: kolla direkt när sidan blir synlig igen
+  document.addEventListener('visibilitychange', () => {
+    if (api.isLoggedIn() && state.profile && document.visibilityState === 'visible' && Date.now() - state.live.checkedAt > 60000) checkLive();
+  });
 
   // Matchgenomgång
   const rvd = $('[data-rv-dialog]');
@@ -558,6 +642,7 @@ async function start() {
       state.champs = c;
       $('[data-scout-champs]').innerHTML = c.all().map((x) => `<option value="${esc(x.name)}"></option>`).join('');
       render();
+      startLive();
     });
   } catch (err) {
     fail(err);
